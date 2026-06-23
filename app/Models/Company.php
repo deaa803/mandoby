@@ -40,6 +40,6 @@ class Company extends Model
 
     public function drivers()
     {
-        return $this->hasMany(Driver::class, 'company_driver');
+        return $this->hasMany(Driver::class, 'company_id');
     }
 }

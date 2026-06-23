@@ -215,29 +215,4 @@ class DriverController extends Controller
     }
 
 
-    /**
-     * Get current driver's assigned orders.
-     */
-    public function myOrders(Request $request)
-    {
-        $user = $request->user();
-
-        if ($user->user_type !== 'driver' || ! $user->driver) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Only drivers can view driver orders',
-            ], 403);
-        }
-
-        $orders = $user->driver->orders()
-            ->with(['store', 'productDetails', 'payments'])
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Driver orders retrieved successfully',
-            'data' => $orders,
-        ], 200);
-    }
 }

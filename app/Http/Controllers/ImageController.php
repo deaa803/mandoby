@@ -8,14 +8,9 @@ use Illuminate\Support\Facades\Storage;
 
 class ImageController extends Controller
 {
-    /**
-     * Display a listing of images.
-     */
     public function index()
     {
-        $images = Image::with('productDetail')
-            ->latest()
-            ->get();
+        $images = Image::with('productDetail')->latest()->get();
 
         return response()->json([
             'status' => true,
@@ -24,9 +19,6 @@ class ImageController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created image.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -38,7 +30,7 @@ class ImageController extends Controller
 
         $image = Image::create([
             'product_detail_id' => $validated['product_detail_id'],
-            'path' => $path,
+            'url' => $path,
         ]);
 
         return response()->json([
@@ -48,9 +40,6 @@ class ImageController extends Controller
         ], 201);
     }
 
-    /**
-     * Display the specified image.
-     */
     public function show(Image $image)
     {
         return response()->json([
@@ -60,9 +49,6 @@ class ImageController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified image.
-     */
     public function update(Request $request, Image $image)
     {
         $validated = $request->validate([
@@ -72,16 +58,16 @@ class ImageController extends Controller
 
         $data = [];
 
-        if (array_key_exists('product_detail_id', $validated)) {
+        if (isset($validated['product_detail_id'])) {
             $data['product_detail_id'] = $validated['product_detail_id'];
         }
 
         if ($request->hasFile('image')) {
-            if ($image->path) {
-                Storage::disk('public')->delete($image->path);
+            if ($image->url) {
+                Storage::disk('public')->delete($image->url);
             }
 
-            $data['path'] = $request->file('image')->store('product-details/images', 'public');
+            $data['url'] = $request->file('image')->store('product-details/images', 'public');
         }
 
         if (!empty($data)) {
@@ -95,13 +81,10 @@ class ImageController extends Controller
         ]);
     }
 
-    /**
-     * Remove the specified image.
-     */
     public function destroy(Image $image)
     {
-        if ($image->path) {
-            Storage::disk('public')->delete($image->path);
+        if ($image->url) {
+            Storage::disk('public')->delete($image->url);
         }
 
         $image->delete();
@@ -109,6 +92,7 @@ class ImageController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Image deleted successfully',
+            'data' => null,
         ]);
     }
 }

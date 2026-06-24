@@ -49,5 +49,9 @@ class ProductDetail extends Model
     {
         return $this->hasMany(Image::class);
     }
+    public function advertisement()
+    {
+        return $this->hasMany(Advertisement::class);
+    }
 
 }

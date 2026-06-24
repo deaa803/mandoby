@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AdvertisementController;
+use App\Http\Controllers\HomeController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -16,13 +18,19 @@ use App\Http\Controllers\CompanyController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+Route::post('/register', [\App\Http\Controllers\StoreController::class, 'store']);
+
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', function (Request $request) {
         return $request->user();
+
+
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    Route::apiResource('ad',AdvertisementController::class);
 
     Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);
     Route::apiResource('features', FeatureController::class)->only(['index', 'show']);
@@ -41,3 +49,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('companies', CompanyController::class)->only(['index', 'show']);
     });
 });
+
+Route::get('home/category', [HomeController::class, 'categories']);
+Route::get('home/product/specail', [HomeController::class, 'specialProducts']);
+Route::get('home/offer', [HomeController::class, 'offers']);
+Route::get('home/category/{category}/products', [HomeController::class, 'productsByCategory']);
+Route::get('home/company/{company}/products', [HomeController::class, 'productsByCompany']);

@@ -42,4 +42,8 @@ class Company extends Model
     {
         return $this->hasMany(Driver::class, 'company_id');
     }
+    public function advertisements()
+    {
+        return $this->hasMany(Advertisement::class, 'company_id');
+    }
 }

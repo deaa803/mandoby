@@ -27,7 +27,8 @@ return new class extends Migration
                 ->constrained('company_cars')
                 ->nullOnDelete();
 
-            $table->string('status')->default('available');
+            $table->enum('status', ['available', 'busy', 'offline'])
+                ->default('available');
 
             $table->decimal('current_lat', 10, 7)->nullable();
             $table->decimal('current_lng', 10, 7)->nullable();

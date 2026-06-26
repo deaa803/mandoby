@@ -19,8 +19,7 @@ return new class extends Migration
             $table->string('password');
             $table->text('address')->nullable();
             $table->string('phone')->nullable();
-            $table->string('user_type');
-            $table->rememberToken();
+            $table->enum('user_type', ['store', 'company', 'driver', 'admin']);            $table->rememberToken();
             $table->timestamps();
         });
 

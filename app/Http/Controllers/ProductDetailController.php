@@ -8,17 +8,20 @@ use Illuminate\Support\Facades\DB;
 
 class ProductDetailController extends Controller
 {
+    private array $relations = [
+        'product',
+        'company',
+        'category',
+        'images',
+        'features',
+    ];
+
     /**
      * Display a listing of product details.
      */
     public function index()
     {
-        $productDetails = ProductDetail::with([
-            'product',
-            'company',
-            'category',
-            'features',
-        ])
+        $productDetails = ProductDetail::with($this->relations)
             ->latest()
             ->get();
 
@@ -54,17 +57,15 @@ class ProductDetailController extends Controller
                     'status' => $validated['status'] ?? 'available',
                 ]);
 
-                if (!empty($validated['features'])) {
-                    $featuresData = [];
+                $featuresData = [];
 
-                    foreach ($validated['features'] as $feature) {
-                        $featuresData[$feature['feature_id']] = [
-                            'value' => $feature['value'],
-                        ];
-                    }
-
-                    $productDetail->features()->attach($featuresData);
+                foreach ($validated['features'] as $feature) {
+                    $featuresData[$feature['feature_id']] = [
+                        'value' => $feature['value'],
+                    ];
                 }
+
+                $productDetail->features()->attach($featuresData);
 
                 return $productDetail;
             });
@@ -72,12 +73,7 @@ class ProductDetailController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Product detail created successfully',
-                'data' => $productDetail->load([
-                    'product',
-                    'company',
-                    'category',
-                    'features',
-                ]),
+                'data' => $productDetail->load($this->relations),
             ], 201);
 
         } catch (\Throwable $e) {
@@ -92,17 +88,14 @@ class ProductDetailController extends Controller
     /**
      * Display the specified product detail.
      */
-    public function show(ProductDetail $productDetail)
+    public function show($id)
     {
+        $productDetail = ProductDetail::with($this->relations)->findOrFail($id);
+
         return response()->json([
             'status' => true,
             'message' => 'Product detail retrieved successfully',
-            'data' => $productDetail->load([
-                'product',
-                'company',
-                'category',
-                'features',
-            ]),
+            'data' => $productDetail,
         ]);
     }
 
@@ -124,23 +117,9 @@ class ProductDetailController extends Controller
 
         try {
             $updatedProductDetail = DB::transaction(function () use ($validated, $productDetail) {
-                $productDetailData = [];
-
-                if (array_key_exists('product_id', $validated)) {
-                    $productDetailData['product_id'] = $validated['product_id'];
-                }
-
-                if (array_key_exists('company_id', $validated)) {
-                    $productDetailData['company_id'] = $validated['company_id'];
-                }
-
-                if (array_key_exists('category_id', $validated)) {
-                    $productDetailData['category_id'] = $validated['category_id'];
-                }
-
-                if (array_key_exists('status', $validated)) {
-                    $productDetailData['status'] = $validated['status'];
-                }
+                $productDetailData = collect($validated)
+                    ->only(['product_id', 'company_id', 'category_id', 'status'])
+                    ->toArray();
 
                 if (!empty($productDetailData)) {
                     $productDetail->update($productDetailData);
@@ -149,7 +128,7 @@ class ProductDetailController extends Controller
                 if (array_key_exists('features', $validated)) {
                     $featuresData = [];
 
-                    foreach ($validated['features'] as $feature) {
+                    foreach ($validated['features'] ?? [] as $feature) {
                         $featuresData[$feature['feature_id']] = [
                             'value' => $feature['value'],
                         ];
@@ -158,12 +137,7 @@ class ProductDetailController extends Controller
                     $productDetail->features()->sync($featuresData);
                 }
 
-                return $productDetail->fresh()->load([
-                    'product',
-                    'company',
-                    'category',
-                    'features',
-                ]);
+                return $productDetail->fresh()->load($this->relations);
             });
 
             return response()->json([
@@ -195,6 +169,7 @@ class ProductDetailController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Product detail deleted successfully',
+                'data' => null,
             ]);
 
         } catch (\Throwable $e) {
@@ -204,5 +179,28 @@ class ProductDetailController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    public function myCompanyProducts(Request $request)
+    {
+        $company = $request->user()->company;
+
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $products = ProductDetail::with($this->relations)
+            ->where('company_id', $company->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'My company products retrieved successfully',
+            'data' => $products,
+        ]);
     }
 }

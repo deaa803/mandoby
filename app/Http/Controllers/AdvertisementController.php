@@ -13,7 +13,9 @@ class AdvertisementController extends Controller
         $advertisements = Advertisement::with([
             'company',
             'productDetail.product',
+            'productDetail.category',
             'productDetail.images',
+            'productDetail.features',
         ])
             ->latest()
             ->get();
@@ -59,7 +61,9 @@ class AdvertisementController extends Controller
             'data' => $advertisement->load([
                 'company',
                 'productDetail.product',
+                'productDetail.category',
                 'productDetail.images',
+                'productDetail.features',
             ]),
         ], 201);
     }
@@ -72,7 +76,9 @@ class AdvertisementController extends Controller
             'data' => $advertisement->load([
                 'company',
                 'productDetail.product',
+                'productDetail.category',
                 'productDetail.images',
+                'productDetail.features',
             ]),
         ]);
     }
@@ -107,7 +113,9 @@ class AdvertisementController extends Controller
             'data' => $advertisement->fresh()->load([
                 'company',
                 'productDetail.product',
+                'productDetail.category',
                 'productDetail.images',
+                'productDetail.features',
             ]),
         ]);
     }

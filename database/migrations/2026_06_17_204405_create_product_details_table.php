@@ -23,8 +23,8 @@ return new class extends Migration
                 ->constrained('categories')
                 ->cascadeOnDelete();
 
-            $table->string('status')->default('available');
-
+            $table->enum('status', ['available', 'unavailable'])
+                ->default('available');
             $table->timestamps();
         });
     }

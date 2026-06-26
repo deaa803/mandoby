@@ -95,4 +95,30 @@ class ImageController extends Controller
             'data' => null,
         ]);
     }
+    public function storeMultiple(Request $request, $productDetailId)
+    {
+        $validated = $request->validate([
+            'images' => ['required', 'array', 'min:1'],
+            'images.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+
+        $uploadedImages = [];
+
+        foreach ($request->file('images') as $imageFile) {
+            $path = $imageFile->store('product-details/images', 'public');
+
+            $image = Image::create([
+                'product_detail_id' => $productDetailId,
+                'url' => $path,
+            ]);
+
+            $uploadedImages[] = $image;
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Images uploaded successfully',
+            'data' => $uploadedImages,
+        ], 201);
+    }
 }

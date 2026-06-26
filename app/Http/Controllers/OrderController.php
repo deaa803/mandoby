@@ -8,12 +8,21 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    private array $relations = [
+        'store.user',
+        'productDetails.product',
+        'productDetails.company',
+        'productDetails.category',
+        'productDetails.images',
+        'payments',
+    ];
+
     /**
      * Display a listing of orders.
      */
     public function index()
     {
-        $orders = Order::with(['store', 'productDetails'])
+        $orders = Order::with($this->relations)
             ->latest()
             ->get();
 
@@ -29,9 +38,18 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
         $validated = $request->validate([
-            'store_id' => ['required', 'exists:stores,id'],
-            'date' => ['required', 'date'],
+            'date' => ['nullable', 'date'],
             'commission' => ['nullable', 'numeric', 'min:0'],
             'status' => ['nullable', 'string', 'max:255'],
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
@@ -44,7 +62,7 @@ class OrderController extends Controller
         ]);
 
         try {
-            $order = DB::transaction(function () use ($validated) {
+            $order = DB::transaction(function () use ($validated, $store) {
                 $totalPrice = 0;
 
                 foreach ($validated['products'] as $product) {
@@ -60,9 +78,9 @@ class OrderController extends Controller
                 $remainingAmount = $totalPrice - $paidAmount;
 
                 $order = Order::create([
-                    'store_id' => $validated['store_id'],
+                    'store_id' => $store->id,
                     'total_price' => $totalPrice,
-                    'date' => $validated['date'],
+                    'date' => $validated['date'] ?? now()->toDateString(),
                     'commission' => $commission,
                     'status' => $validated['status'] ?? 'pending',
                     'paid_amount' => $paidAmount,
@@ -83,7 +101,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Order created successfully',
-                'data' => $order->load(['store', 'productDetails']),
+                'data' => $order->load($this->relations),
             ], 201);
 
         } catch (\Throwable $e) {
@@ -103,7 +121,7 @@ class OrderController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Order retrieved successfully',
-            'data' => $order->load(['store', 'productDetails']),
+            'data' => $order->load($this->relations),
         ]);
     }
 
@@ -128,26 +146,16 @@ class OrderController extends Controller
 
         try {
             $updatedOrder = DB::transaction(function () use ($validated, $order) {
-                $orderData = [];
+                $orderData = collect($validated)
+                    ->only(['store_id', 'date', 'commission', 'status', 'paid_amount'])
+                    ->toArray();
 
-                if (array_key_exists('store_id', $validated)) {
-                    $orderData['store_id'] = $validated['store_id'];
+                if (array_key_exists('commission', $orderData)) {
+                    $orderData['commission'] = $orderData['commission'] ?? 0;
                 }
 
-                if (array_key_exists('date', $validated)) {
-                    $orderData['date'] = $validated['date'];
-                }
-
-                if (array_key_exists('commission', $validated)) {
-                    $orderData['commission'] = $validated['commission'] ?? 0;
-                }
-
-                if (array_key_exists('status', $validated)) {
-                    $orderData['status'] = $validated['status'];
-                }
-
-                if (array_key_exists('paid_amount', $validated)) {
-                    $orderData['paid_amount'] = $validated['paid_amount'] ?? 0;
+                if (array_key_exists('paid_amount', $orderData)) {
+                    $orderData['paid_amount'] = $orderData['paid_amount'] ?? 0;
                 }
 
                 if (array_key_exists('products', $validated)) {
@@ -174,17 +182,15 @@ class OrderController extends Controller
                     $orderData['remaining_amount'] = $totalPrice - $paidAmount;
 
                     $order->productDetails()->sync($syncData);
-                } else {
-                    if (array_key_exists('paid_amount', $orderData)) {
-                        $orderData['remaining_amount'] = $order->total_price - $orderData['paid_amount'];
-                    }
+                } elseif (array_key_exists('paid_amount', $orderData)) {
+                    $orderData['remaining_amount'] = $order->total_price - $orderData['paid_amount'];
                 }
 
                 if (!empty($orderData)) {
                     $order->update($orderData);
                 }
 
-                return $order->fresh()->load(['store', 'productDetails']);
+                return $order->fresh()->load($this->relations);
             });
 
             return response()->json([
@@ -216,6 +222,7 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Order deleted successfully',
+                'data' => null,
             ]);
 
         } catch (\Throwable $e) {
@@ -225,5 +232,84 @@ class OrderController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    public function myOrders(Request $request)
+    {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $orders = Order::with($this->relations)
+            ->where('store_id', $store->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'My orders retrieved successfully',
+            'data' => $orders,
+        ]);
+    }
+
+    public function myDebts(Request $request)
+    {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $orders = Order::with($this->relations)
+            ->where('store_id', $store->id)
+            ->where('remaining_amount', '>', 0)
+            ->latest()
+            ->get();
+
+        $totalDebt = $orders->sum('remaining_amount');
+
+        return response()->json([
+            'status' => true,
+            'message' => 'My debts retrieved successfully',
+            'data' => [
+                'total_debt' => $totalDebt,
+                'orders' => $orders,
+            ],
+        ]);
+    }
+
+    public function companyOrders(Request $request)
+    {
+        $company = $request->user()->company;
+
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $orders = Order::with($this->relations)
+            ->whereHas('productDetails', function ($query) use ($company) {
+                $query->where('company_id', $company->id);
+            })
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company orders retrieved successfully',
+            'data' => $orders,
+        ]);
     }
 }

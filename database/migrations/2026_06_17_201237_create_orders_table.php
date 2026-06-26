@@ -15,10 +15,18 @@ return new class extends Migration
                 ->constrained('stores')
                 ->cascadeOnDelete();
 
-            $table->decimal('total_price', 10, 2);
+            $table->decimal('total_price', 15, 2)->default(0);
             $table->date('date');
-            $table->decimal('commission', 10, 2)->default(0);
-            $table->string('status')->default('pending');
+            $table->decimal('commission', 15, 2)->default(0);
+
+            $table->enum('status', [
+                'pending',
+                'preparing',
+                'delivering',
+                'delivered',
+                'cancelled',
+            ])->default('pending');
+
             $table->decimal('paid_amount', 15, 2)->default(0);
             $table->decimal('remaining_amount', 15, 2)->default(0);
 

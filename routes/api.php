@@ -36,6 +36,8 @@ Route::post('/register/company', [CompanyController::class, 'store']);
 |--------------------------------------------------------------------------
 */
 
+Route::get('home', [HomeController::class, 'homepage']);
+
 Route::get('home/category', [HomeController::class, 'categories']);
 
 Route::get('home/product/special', [HomeController::class, 'specialProducts']);

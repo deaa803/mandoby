@@ -100,4 +100,46 @@ class HomeController extends Controller
         ]);
     }
 
+    public function homepage()
+    {
+        $now = Carbon::now();
+
+        $categories = Category::latest()->get();
+
+        $specialProducts = ProductDetail::with($this->productDetailRelations)
+            ->where('status', 'available')
+            ->latest()
+            ->take(10)
+            ->get();
+
+        $offers = Advertisement::with([
+            'company',
+            'productDetail.product',
+            'productDetail.category',
+            'productDetail.images',
+            'productDetail.features',
+        ])
+            ->where('status', 'active')
+            ->where(function ($query) use ($now) {
+                $query->whereNull('starts_at')
+                    ->orWhere('starts_at', '<=', $now);
+            })
+            ->where(function ($query) use ($now) {
+                $query->whereNull('ends_at')
+                    ->orWhere('ends_at', '>=', $now);
+            })
+            ->latest()
+            ->take(10)
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Home data retrieved successfully',
+            'data' => [
+                'categories' => $categories,
+                'special_products' => $specialProducts,
+                'offers' => $offers,
+            ],
+        ]);
+    }
 }

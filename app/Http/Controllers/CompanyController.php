@@ -36,7 +36,8 @@ class CompanyController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'address' => ['required', 'string', 'max:255'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
 
             // company fields
             'name_company' => ['required', 'string', 'max:255'],
@@ -51,7 +52,8 @@ class CompanyController extends Controller
                     'email' => $validated['email'],
                     'password' => Hash::make($validated['password']),
                     'phone' => $validated['phone'] ?? null,
-                    'address' => $validated['address'],
+                    'latitude' => $validated['latitude'],
+                    'longitude' => $validated['longitude'],
                     'user_type' => 'company',
                 ]);
 
@@ -115,7 +117,8 @@ class CompanyController extends Controller
             'email' => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $company->user_id],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-            'address' => ['sometimes', 'string', 'max:255'],
+            'latitude' => ['sometimes', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
 
             // company fields
             'name_company' => ['sometimes', 'string', 'max:255'],
@@ -126,7 +129,7 @@ class CompanyController extends Controller
         try {
             $updatedCompany = DB::transaction(function () use ($request, $validated, $company) {
                 $userData = collect($validated)
-                    ->only(['name', 'email', 'phone', 'address'])
+                    ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
                     ->toArray();
 
                 if (!empty($validated['password'])) {

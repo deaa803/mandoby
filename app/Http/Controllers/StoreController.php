@@ -35,7 +35,8 @@ class StoreController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'address' => ['nullable', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
 
             // store fields
             'name_store' => ['required', 'string', 'max:255'],
@@ -49,7 +50,8 @@ class StoreController extends Controller
                     'email' => $validated['email'],
                     'password' => Hash::make($validated['password']),
                     'phone' => $validated['phone'] ?? null,
-                    'address' => $validated['address'] ?? null,
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
                     'user_type' => 'store',
                 ]);
 
@@ -106,7 +108,8 @@ class StoreController extends Controller
             'email' => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $store->user_id],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-            'address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
 
             // store fields
             'name_store' => ['sometimes', 'string', 'max:255'],
@@ -116,7 +119,7 @@ class StoreController extends Controller
         try {
             $updatedStore = DB::transaction(function () use ($validated, $store) {
                 $userData = collect($validated)
-                    ->only(['name', 'email', 'phone', 'address'])
+                    ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
                     ->toArray();
 
                 if (!empty($validated['password'])) {

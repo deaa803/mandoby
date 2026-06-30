@@ -24,7 +24,8 @@ class User extends Authenticatable
         'email',
         'password',
         'phone',
-        'address',
+        'latitude',
+        'longitude',
         'user_type',
     ];
 
@@ -48,8 +49,11 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
         ];
     }
+
     public function company()
     {
         return $this->hasOne(Company::class);
@@ -64,10 +68,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(ShippingOffice::class);
     }
+
     public function driver()
     {
         return $this->hasOne(Driver::class);
     }
-
-
 }

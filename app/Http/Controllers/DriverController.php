@@ -37,7 +37,8 @@ class DriverController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'address' => ['nullable', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
 
             // driver fields
             'company_id' => ['required', 'exists:companies,id'],
@@ -52,7 +53,8 @@ class DriverController extends Controller
                     'email' => $validated['email'],
                     'password' => Hash::make($validated['password']),
                     'phone' => $validated['phone'] ?? null,
-                    'address' => $validated['address'] ?? null,
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
                     'user_type' => 'driver',
                 ]);
 
@@ -110,7 +112,8 @@ class DriverController extends Controller
             'email' => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $driver->user_id],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-            'address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
 
             // driver fields
             'company_id' => ['sometimes', 'exists:companies,id'],
@@ -121,7 +124,7 @@ class DriverController extends Controller
         try {
             $updatedDriver = DB::transaction(function () use ($validated, $driver) {
                 $userData = collect($validated)
-                    ->only(['name', 'email', 'phone', 'address'])
+                    ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
                     ->toArray();
 
                 if (!empty($validated['password'])) {

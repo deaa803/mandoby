@@ -6,6 +6,7 @@ use App\Models\Advertisement;
 use App\Models\Category;
 use App\Models\ProductDetail;
 use Carbon\Carbon;
+use App\Models\Company;
 
 class HomeController extends Controller
 {
@@ -103,7 +104,7 @@ class HomeController extends Controller
     public function homepage()
     {
         $now = Carbon::now();
-
+        $companies = Company::latest()->get();
         $categories = Category::latest()->get();
 
         $specialProducts = ProductDetail::with($this->productDetailRelations)
@@ -136,6 +137,7 @@ class HomeController extends Controller
             'status' => true,
             'message' => 'Home data retrieved successfully',
             'data' => [
+                'companies' => $companies,
                 'categories' => $categories,
                 'special_products' => $specialProducts,
                 'offers' => $offers,

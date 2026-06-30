@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\TestPushController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -26,10 +27,16 @@ use App\Http\Controllers\CompanyDashboardController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+Route::get('/salmooo',[ProductDetailController::class,'index']);
+
 Route::post('/register', [StoreController::class, 'store']);
 Route::post('/register/store', [StoreController::class, 'store']);
 Route::post('/register/company', [CompanyController::class, 'store']);
 
+use App\Http\Controllers\DriverFcmTokenController;
+
+Route::post('/test-push', [TestPushController::class, 'send']);
+Route::post('/driver/fcm-token', [DriverFcmTokenController::class, 'store']);
 /*
 |--------------------------------------------------------------------------
 | Public Home Routes
@@ -95,7 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('product-details', ProductDetailController::class);
     Route::apiResource('images', ImageController::class);
 
-    Route::post('product-details/{productDetail}/images', [ImageController::class, 'storeMultiple']);
+    Route::post('product-details/images/{productDetail}', [ImageController::class, 'storeMultiple']);
 
     Route::apiResource('ad', AdvertisementController::class);
 

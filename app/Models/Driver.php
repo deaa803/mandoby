@@ -14,6 +14,7 @@ class Driver extends Model
         'current_lat',
         'current_lng',
         'last_location_at',
+        'fcm_token',
     ];
 
     public function user()

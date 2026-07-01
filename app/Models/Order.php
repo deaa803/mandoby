@@ -17,6 +17,7 @@ class Order extends Model
         'status',
         'paid_amount',
         'remaining_amount',
+        'driver_id'
     ];
 
     protected $casts = [
@@ -38,6 +39,10 @@ class Order extends Model
     public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+    public function driver(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Driver::class);
     }
 
 }

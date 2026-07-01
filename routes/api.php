@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DriverAppController;
 use App\Http\Controllers\TestPushController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,7 @@ use App\Http\Controllers\CompanyDashboardController;
 */
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/driver/login', [AuthController::class, 'logindriver']);
 
 Route::get('/salmooo',[ProductDetailController::class,'index']);
 
@@ -134,5 +136,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('cars', CompanyCarController::class);
         Route::apiResource('payments', PaymentController::class);
+
+        Route::post('orders/{order}/assign-driver', [OrderController::class, 'assignDriver']);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | driver Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware('user.type:driver')->prefix('driver')->group(function () {
+        Route::get('/profile', [DriverAppController::class, 'profile']);
+        Route::post('/fcm-token', [DriverAppController::class, 'saveFcmToken']);
+
+        Route::get('/current-order', [DriverAppController::class, 'currentOrder']);
+        Route::post('/orders/{order}/delivered', [DriverAppController::class, 'markAsDelivered']);
+        Route::get('/delivery-history', [DriverAppController::class, 'deliveryHistory']);
     });
 });

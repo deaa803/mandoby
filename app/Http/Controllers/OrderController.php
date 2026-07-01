@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Driver;
 use App\Models\Order;
+use App\Services\FcmService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+
 
 class OrderController extends Controller
 {
@@ -310,6 +313,96 @@ class OrderController extends Controller
             'status' => true,
             'message' => 'Company orders retrieved successfully',
             'data' => $orders,
+        ]);
+    }
+    public function assignDriver(Request $request, Order $order, FcmService $fcmService)
+    {
+        $user = $request->user()->load('company');
+
+        if ($user->user_type !== 'company') {
+            return response()->json([
+                'status' => false,
+                'message' => 'This account is not a company account',
+            ], 403);
+        }
+
+        if (!$user->company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company profile not found',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'driver_id' => ['required', 'exists:drivers,id'],
+        ]);
+
+        $driver = Driver::where('id', $validated['driver_id'])
+            ->where('company_id', $user->company->id)
+            ->first();
+
+        if (!$driver) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Driver not found in your company',
+            ], 404);
+        }
+
+        $belongsToCompany = $order->productDetails()
+            ->where('company_id', $user->company->id)
+            ->exists();
+
+        if (!$belongsToCompany) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your company',
+            ], 403);
+        }
+
+        $order->update([
+            'driver_id' => $driver->id,
+            'status' => 'delivering',
+        ]);
+
+        $order->load([
+            'store.user',
+            'driver.user',
+            'driver.company',
+            'productDetails.product',
+            'productDetails.category',
+            'productDetails.images',
+        ]);
+
+        if ($driver->fcm_token) {
+            try {
+                $fcmService->sendToToken(
+                    token: $driver->fcm_token,
+                    title: 'طلب جديد',
+                    body: 'لديك طلب توصيل جديد',
+                    data: [
+                        'type' => 'new_order',
+                        'order_id' => $order->id,
+                        'driver_id' => $driver->id,
+                    ],
+                );
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Order assigned to driver, but push notification failed',
+                    'data' => [
+                        'order' => $order,
+                        'push_error' => $e->getMessage(),
+                    ],
+                ]);
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Order assigned to driver successfully',
+            'data' => [
+                'order' => $order,
+            ],
         ]);
     }
 }

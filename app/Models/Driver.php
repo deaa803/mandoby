@@ -31,5 +31,9 @@ class Driver extends Model
     {
         return $this->belongsTo(CompanyCar::class, 'company_car_id');
     }
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
 
 }

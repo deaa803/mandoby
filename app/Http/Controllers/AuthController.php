@@ -7,6 +7,63 @@ use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
+    public function logindriver()
+    {
+        $validated = request()->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (!Auth::attempt($validated)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Invalid email or password',
+            ], 401);
+        }
+
+        $user = Auth::user();
+
+        if ($user->user_type !== 'driver') {
+            Auth::logout();
+
+            return response()->json([
+                'status' => false,
+                'message' => 'This account is not a driver account',
+            ], 403);
+        }
+
+        $user->load('driver.company');
+
+        if (!$user->driver) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Driver profile not found',
+            ], 404);
+        }
+
+        $token = $user->createToken('driver-app')->plainTextToken;
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Driver login successfully',
+            'data' => [
+                'token' => $token,
+                'driver' => [
+                    'id' => $user->driver->id,
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'address' => $user->address,
+                    'company_id' => $user->driver->company_id,
+                    'company_name' => $user->driver->company?->name_company,
+                    'vehicle_type' => $user->driver->vehicle_type,
+                    'plate_number' => $user->driver->plate_number,
+                    'is_active' => $user->driver->is_active,
+                ],
+            ],
+        ]);
+    }
     public function login(Request $request)
     {
         $validated = $request->validate([

@@ -46,4 +46,9 @@ class Company extends Model
     {
         return $this->hasMany(Advertisement::class, 'company_id');
     }
+
+    public function product3dModels()
+    {
+        return $this->hasMany(Product3DModel::class);
+    }
 }

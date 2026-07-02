@@ -193,6 +193,104 @@ class PaymentController extends Controller
         }
     }
 
+
+    public function storePayments(Request $request)
+    {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $payments = Payment::with(['order.store', 'order.productDetails.product', 'order.productDetails.company'])
+            ->whereHas('order', fn ($query) => $query->where('store_id', $store->id))
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Store payments retrieved successfully',
+            'data' => $payments,
+        ]);
+    }
+
+    public function companyPayments(Request $request)
+    {
+        $company = $request->user()->company;
+
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $payments = Payment::with(['order.store', 'order.productDetails.product', 'order.productDetails.company'])
+            ->whereHas('order.productDetails', fn ($query) => $query->where('company_id', $company->id))
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company payments retrieved successfully',
+            'data' => $payments,
+        ]);
+    }
+
+    public function storeInstallments(Request $request)
+    {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $orders = Order::with(['store.user', 'productDetails.product', 'productDetails.company', 'payments'])
+            ->where('store_id', $store->id)
+            ->where('remaining_amount', '>', 0)
+            ->latest()
+            ->get();
+
+        $installments = $orders->map(function (Order $order) {
+            return [
+                'id' => $order->id,
+                'order_id' => $order->id,
+                'title' => 'قسط طلب #' . $order->id,
+                'status' => 'مستحقة',
+                'amount' => (float) $order->remaining_amount,
+                'paid_amount' => (float) $order->paid_amount,
+                'remaining_amount' => (float) $order->remaining_amount,
+                'total_price' => (float) $order->total_price,
+                'due_date' => optional($order->date)->addMonth()?->toDateString(),
+                'order' => $order,
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Store installments retrieved successfully',
+            'data' => [
+                'summary' => [
+                    'total_orders' => $orders->count(),
+                    'total_price' => (float) $orders->sum('total_price'),
+                    'total_paid' => (float) $orders->sum('paid_amount'),
+                    'total_remaining' => (float) $orders->sum('remaining_amount'),
+                ],
+                'installments' => $installments,
+                'orders' => $orders,
+            ],
+        ]);
+    }
+
     /**
      * Recalculate paid_amount and remaining_amount for the order.
      */

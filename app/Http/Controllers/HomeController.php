@@ -16,6 +16,7 @@ class HomeController extends Controller
         'company',
         'images',
         'features',
+        'model3d',
     ];
 
     public function categories()
@@ -53,6 +54,7 @@ class HomeController extends Controller
             'productDetail.category',
             'productDetail.images',
             'productDetail.features',
+            'productDetail.model3d',
         ])
             ->where('status', 'active')
             ->where(function ($query) use ($now) {
@@ -119,6 +121,7 @@ class HomeController extends Controller
             'productDetail.category',
             'productDetail.images',
             'productDetail.features',
+            'productDetail.model3d',
         ])
             ->where('status', 'active')
             ->where(function ($query) use ($now) {

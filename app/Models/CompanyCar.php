@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class CompanyCar extends Model
 {
@@ -20,8 +20,14 @@ class CompanyCar extends Model
     {
         return $this->belongsTo(Company::class);
     }
+
+    public function driver()
+    {
+        return $this->hasOne(Driver::class, 'company_car_id');
+    }
+
     public function drivers()
     {
-        return $this->hasMany(Driver::class,);
+        return $this->hasMany(Driver::class, 'company_car_id');
     }
 }

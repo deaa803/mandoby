@@ -9,11 +9,16 @@ class ProductDetail extends Model
 {
     use HasFactory;
 
+    protected $appends = [
+        'has_3d_model',
+    ];
+
     protected $fillable = [
         'product_id',
         'company_id',
         'category_id',
         'status',
+        'price',
     ];
 
     public function product()
@@ -52,6 +57,39 @@ class ProductDetail extends Model
     public function advertisement()
     {
         return $this->hasMany(Advertisement::class);
+    }
+
+    public function model3d()
+    {
+        return $this->hasOne(Product3DModel::class);
+    }
+
+    public function getHas3dModelAttribute(): bool
+    {
+        if ($this->relationLoaded('model3d')) {
+            $model = $this->getRelation('model3d');
+
+            return $model !== null
+                && $model->status === 'completed'
+                && !empty($model->model_file);
+        }
+
+        return $this->model3d()
+            ->where('status', 'completed')
+            ->whereNotNull('model_file')
+            ->exists();
+    }
+
+    public function toArray(): array
+    {
+        $data = parent::toArray();
+
+        if (array_key_exists('model3d', $data)) {
+            $data['model_3d'] = $data['model3d'];
+            unset($data['model3d']);
+        }
+
+        return $data;
     }
 
 }

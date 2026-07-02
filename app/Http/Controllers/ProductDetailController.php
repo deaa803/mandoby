@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Image;
+use App\Models\Product;
 use App\Models\ProductDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ProductDetailController extends Controller
 {
@@ -14,6 +17,7 @@ class ProductDetailController extends Controller
         'category',
         'images',
         'features',
+        'model3d',
     ];
 
     /**
@@ -34,38 +38,80 @@ class ProductDetailController extends Controller
 
     /**
      * Store a newly created product detail.
+     *
+     * Company accounts do not send company_id from Flutter. The company is resolved
+     * from the authenticated Sanctum token.
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'product_id' => ['required', 'exists:products,id'],
-            'company_id' => ['required', 'exists:companies,id'],
-            'category_id' => ['required', 'exists:categories,id'],
-            'status' => ['nullable', 'string', 'max:255'],
+        $company = $request->user()?->company;
 
-            'features' => ['required', 'array'],
+        $validated = $request->validate([
+            'product_id' => ['nullable', 'exists:products,id'],
+            'product_name' => ['required_without:product_id', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
+            'company_id' => ['nullable', 'exists:companies,id'],
+            'category_id' => ['required', 'exists:categories,id'],
+            'status' => ['nullable', 'in:available,unavailable'],
+            'price' => ['nullable', 'numeric', 'min:0'],
+
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'images' => ['nullable', 'array'],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+
+            'features' => ['nullable', 'array'],
             'features.*.feature_id' => ['required_with:features', 'exists:features,id'],
             'features.*.value' => ['required_with:features', 'string', 'max:255'],
         ]);
 
+        $companyId = $company?->id ?? ($validated['company_id'] ?? null);
+
+        if (!$companyId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
         try {
-            $productDetail = DB::transaction(function () use ($validated) {
+            $productDetail = DB::transaction(function () use ($request, $validated, $companyId) {
+                $product = !empty($validated['product_id'])
+                    ? Product::findOrFail($validated['product_id'])
+                    : Product::create([
+                        'name' => $validated['product_name'],
+                        'description' => $validated['description'] ?? null,
+                        'min_order_quantity' => $validated['min_order_quantity'] ?? 1,
+                    ]);
+
                 $productDetail = ProductDetail::create([
-                    'product_id' => $validated['product_id'],
-                    'company_id' => $validated['company_id'],
+                    'product_id' => $product->id,
+                    'company_id' => $companyId,
                     'category_id' => $validated['category_id'],
                     'status' => $validated['status'] ?? 'available',
+                    'price' => $validated['price'] ?? 0,
                 ]);
 
                 $featuresData = [];
 
-                foreach ($validated['features'] as $feature) {
+                foreach ($validated['features'] ?? [] as $feature) {
                     $featuresData[$feature['feature_id']] = [
                         'value' => $feature['value'],
                     ];
                 }
 
-                $productDetail->features()->attach($featuresData);
+                if (!empty($featuresData)) {
+                    $productDetail->features()->attach($featuresData);
+                }
+
+                if ($request->hasFile('image')) {
+                    $this->storeProductImage($productDetail->id, $request->file('image'));
+                }
+
+                foreach ($request->file('images', []) as $imageFile) {
+                    $this->storeProductImage($productDetail->id, $imageFile);
+                }
 
                 return $productDetail;
             });
@@ -106,9 +152,17 @@ class ProductDetailController extends Controller
     {
         $validated = $request->validate([
             'product_id' => ['sometimes', 'required', 'exists:products,id'],
+            'product_name' => ['sometimes', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
             'company_id' => ['sometimes', 'required', 'exists:companies,id'],
             'category_id' => ['sometimes', 'required', 'exists:categories,id'],
-            'status' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', 'in:available,unavailable'],
+            'price' => ['nullable', 'numeric', 'min:0'],
+
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'images' => ['nullable', 'array'],
+            'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
             'features' => ['nullable', 'array'],
             'features.*.feature_id' => ['required_with:features', 'exists:features,id'],
@@ -116,13 +170,33 @@ class ProductDetailController extends Controller
         ]);
 
         try {
-            $updatedProductDetail = DB::transaction(function () use ($validated, $productDetail) {
+            $updatedProductDetail = DB::transaction(function () use ($request, $validated, $productDetail) {
                 $productDetailData = collect($validated)
-                    ->only(['product_id', 'company_id', 'category_id', 'status'])
+                    ->only(['product_id', 'company_id', 'category_id', 'status', 'price'])
                     ->toArray();
 
                 if (!empty($productDetailData)) {
                     $productDetail->update($productDetailData);
+                }
+
+                if (isset($validated['product_name']) || array_key_exists('description', $validated) || array_key_exists('min_order_quantity', $validated)) {
+                    $productData = [];
+
+                    if (isset($validated['product_name'])) {
+                        $productData['name'] = $validated['product_name'];
+                    }
+
+                    if (array_key_exists('description', $validated)) {
+                        $productData['description'] = $validated['description'];
+                    }
+
+                    if (array_key_exists('min_order_quantity', $validated)) {
+                        $productData['min_order_quantity'] = $validated['min_order_quantity'] ?? 1;
+                    }
+
+                    if (!empty($productData)) {
+                        $productDetail->product->update($productData);
+                    }
                 }
 
                 if (array_key_exists('features', $validated)) {
@@ -135,6 +209,21 @@ class ProductDetailController extends Controller
                     }
 
                     $productDetail->features()->sync($featuresData);
+                }
+
+                if ($request->hasFile('image')) {
+                    foreach ($productDetail->images as $image) {
+                        if ($image->url) {
+                            Storage::disk('public')->delete($image->url);
+                        }
+                        $image->delete();
+                    }
+
+                    $this->storeProductImage($productDetail->id, $request->file('image'));
+                }
+
+                foreach ($request->file('images', []) as $imageFile) {
+                    $this->storeProductImage($productDetail->id, $imageFile);
                 }
 
                 return $productDetail->fresh()->load($this->relations);
@@ -163,6 +252,18 @@ class ProductDetailController extends Controller
         try {
             DB::transaction(function () use ($productDetail) {
                 $productDetail->features()->detach();
+
+                if ($productDetail->model3d) {
+                    $productDetail->model3d->delete();
+                }
+
+                foreach ($productDetail->images as $image) {
+                    if ($image->url) {
+                        Storage::disk('public')->delete($image->url);
+                    }
+                    $image->delete();
+                }
+
                 $productDetail->delete();
             });
 
@@ -180,6 +281,7 @@ class ProductDetailController extends Controller
             ], 500);
         }
     }
+
     public function myCompanyProducts(Request $request)
     {
         $company = $request->user()->company;
@@ -201,6 +303,16 @@ class ProductDetailController extends Controller
             'status' => true,
             'message' => 'My company products retrieved successfully',
             'data' => $products,
+        ]);
+    }
+
+    private function storeProductImage(int $productDetailId, $imageFile): Image
+    {
+        $path = $imageFile->store('product-details/images', 'public');
+
+        return Image::create([
+            'product_detail_id' => $productDetailId,
+            'url' => $path,
         ]);
     }
 }

@@ -405,4 +405,46 @@ class OrderController extends Controller
             ],
         ]);
     }
+
+    public function myCurrentOrders(Request $request)
+    {
+        return $this->myOrdersByCompletion($request, false);
+    }
+
+    public function myCompletedOrders(Request $request)
+    {
+        return $this->myOrdersByCompletion($request, true);
+    }
+
+    private function myOrdersByCompletion(Request $request, bool $completed)
+    {
+        $store = $request->user()->store;
+
+        if (!$store) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Store account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $completedStatuses = ['completed', 'delivered', 'تم التسليم', 'مكتمل'];
+
+        $orders = Order::with($this->relations)
+            ->where('store_id', $store->id)
+            ->when(
+                $completed,
+                fn ($query) => $query->whereIn('status', $completedStatuses),
+                fn ($query) => $query->whereNotIn('status', $completedStatuses)
+            )
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => $completed ? 'Completed orders retrieved successfully' : 'Current orders retrieved successfully',
+            'data' => $orders,
+        ]);
+    }
+
 }

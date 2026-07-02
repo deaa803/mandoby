@@ -8,15 +8,18 @@ use Illuminate\Support\Facades\Storage;
 
 class AdvertisementController extends Controller
 {
+    private array $relations = [
+        'company',
+        'productDetail.product',
+        'productDetail.category',
+        'productDetail.images',
+        'productDetail.features',
+        'productDetail.model3d',
+    ];
+
     public function index()
     {
-        $advertisements = Advertisement::with([
-            'company',
-            'productDetail.product',
-            'productDetail.category',
-            'productDetail.images',
-            'productDetail.features',
-        ])
+        $advertisements = Advertisement::with($this->relations)
             ->latest()
             ->get();
 
@@ -29,8 +32,10 @@ class AdvertisementController extends Controller
 
     public function store(Request $request)
     {
+        $company = $request->user()?->company;
+
         $validated = $request->validate([
-            'company_id' => ['required', 'exists:companies,id'],
+            'company_id' => ['nullable', 'exists:companies,id'],
             'product_detail_id' => ['nullable', 'exists:product_details,id'],
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -41,10 +46,20 @@ class AdvertisementController extends Controller
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
         ]);
 
+        $companyId = $company?->id ?? ($validated['company_id'] ?? null);
+
+        if (!$companyId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
         $path = $request->file('image')->store('advertisements', 'public');
 
         $advertisement = Advertisement::create([
-            'company_id' => $validated['company_id'],
+            'company_id' => $companyId,
             'product_detail_id' => $validated['product_detail_id'] ?? null,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
@@ -58,13 +73,7 @@ class AdvertisementController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Advertisement created successfully',
-            'data' => $advertisement->load([
-                'company',
-                'productDetail.product',
-                'productDetail.category',
-                'productDetail.images',
-                'productDetail.features',
-            ]),
+            'data' => $advertisement->load($this->relations),
         ], 201);
     }
 
@@ -73,13 +82,7 @@ class AdvertisementController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Advertisement retrieved successfully',
-            'data' => $advertisement->load([
-                'company',
-                'productDetail.product',
-                'productDetail.category',
-                'productDetail.images',
-                'productDetail.features',
-            ]),
+            'data' => $advertisement->load($this->relations),
         ]);
     }
 
@@ -110,13 +113,7 @@ class AdvertisementController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Advertisement updated successfully',
-            'data' => $advertisement->fresh()->load([
-                'company',
-                'productDetail.product',
-                'productDetail.category',
-                'productDetail.images',
-                'productDetail.features',
-            ]),
+            'data' => $advertisement->fresh()->load($this->relations),
         ]);
     }
 

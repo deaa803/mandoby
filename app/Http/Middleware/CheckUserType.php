@@ -25,7 +25,7 @@ class CheckUserType
 
         if ($user->user_type !== $type) {
             return response()->json([
-                'message' => 'غير مسموح لك بالدخول يا حبيبي',
+                'message' => 'غير مسموح لك بالدخول',
                 'required_type' => $type,
                 'your_type' => $user->user_type,
             ], 403);

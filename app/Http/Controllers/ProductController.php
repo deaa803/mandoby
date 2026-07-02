@@ -24,21 +24,18 @@ class ProductController extends Controller
     }
 
     /**
-     * Store a newly created product.
+     * Store a base product record.
+     *
+     * Company applications should create products through ProductDetailController.
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
+            'description' => ['required', 'string', 'max:5000'],
         ]);
 
-        $product = Product::create([
-            'name' => $validated['name'],
-            'description' => $validated['description'] ?? null,
-            'min_order_quantity' => $validated['min_order_quantity'] ?? 1,
-        ]);
+        $product = Product::create($validated);
 
         return response()->json([
             'status' => true,
@@ -66,8 +63,7 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'min_order_quantity' => ['sometimes', 'required', 'integer', 'min:1'],
+            'description' => ['sometimes', 'required', 'string', 'max:5000'],
         ]);
 
         $product->update($validated);

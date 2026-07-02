@@ -43,6 +43,11 @@ class ProductDetailsTable
                     ->label('السعر')
                     ->sortable(),
 
+                TextColumn::make('min_order_quantity')
+                    ->numeric()
+                    ->label('الحد الأدنى')
+                    ->sortable(),
+
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {

@@ -17,7 +17,6 @@ class ProductsTable
             ->columns([
                 TextColumn::make('name')->label('اسم المنتج')->searchable()->sortable(),
                 TextColumn::make('description')->label('الوصف')->limit(50)->placeholder('-'),
-                TextColumn::make('min_order_quantity')->label('الحد الأدنى')->numeric()->sortable(),
                 TextColumn::make('details_count')->counts('details')->label('عدد عروض الشركات'),
                 TextColumn::make('created_at')->dateTime()->label('تاريخ الإنشاء')->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])

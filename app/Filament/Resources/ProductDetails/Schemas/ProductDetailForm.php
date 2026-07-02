@@ -42,6 +42,14 @@ class ProductDetailForm
                     ->required()
                     ->label('السعر'),
 
+                TextInput::make('min_order_quantity')
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->default(1)
+                    ->required()
+                    ->label('الحد الأدنى للطلب'),
+
                 Select::make('status')
                     ->options([
                         'available' => 'متوفر',

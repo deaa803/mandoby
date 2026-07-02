@@ -306,4 +306,62 @@ class PaymentController extends Controller
             'remaining_amount' => $remainingAmount,
         ]);
     }
+    public function companyInstallments(Request $request)
+    {
+        $company = $request->user()->company;
+
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $orders = Order::with([
+            'store.user',
+            'productDetails.product',
+            'productDetails.company',
+            'payments',
+        ])
+            ->whereHas('productDetails', function ($query) use ($company) {
+                $query->where('company_id', $company->id);
+            })
+            ->where('remaining_amount', '>', 0)
+            ->latest()
+            ->get();
+
+        $installments = $orders->map(function (Order $order) {
+            return [
+                'id' => $order->id,
+                'order_id' => $order->id,
+                'title' => 'مستحقات الطلب #' . $order->id,
+                'status' => 'مستحقة',
+                'amount' => (float) $order->remaining_amount,
+                'paid_amount' => (float) $order->paid_amount,
+                'remaining_amount' => (float) $order->remaining_amount,
+                'total_price' => (float) $order->total_price,
+                'due_date' => optional($order->date)
+                    ?->copy()
+                    ->addMonth()
+                    ->toDateString(),
+                'order' => $order,
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company installments retrieved successfully',
+            'data' => [
+                'summary' => [
+                    'total_orders' => $orders->count(),
+                    'total_price' => (float) $orders->sum('total_price'),
+                    'total_paid' => (float) $orders->sum('paid_amount'),
+                    'total_remaining' => (float) $orders->sum('remaining_amount'),
+                ],
+                'installments' => $installments,
+                'orders' => $orders,
+            ],
+        ]);
+    }
 }

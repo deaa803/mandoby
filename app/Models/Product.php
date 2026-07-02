@@ -12,7 +12,6 @@ class Product extends Model
     protected $fillable = [
         'name',
         'description',
-        'min_order_quantity',
     ];
 
     public function details()

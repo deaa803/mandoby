@@ -19,6 +19,13 @@ class ProductDetail extends Model
         'category_id',
         'status',
         'price',
+        'min_order_quantity',
+    ];
+
+
+    protected $casts = [
+        'price' => 'decimal:2',
+        'min_order_quantity' => 'integer',
     ];
 
     public function product()

@@ -264,7 +264,6 @@ class DatabaseSeeder extends Seeder
             $productIds[] = DB::table('products')->insertGetId([
                 'name' => "Product {$i}",
                 'description' => "Test product description {$i}",
-                'min_order_quantity' => rand(1, 10),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -284,6 +283,8 @@ class DatabaseSeeder extends Seeder
                 'company_id' => fake()->randomElement($companyIds),
                 'category_id' => fake()->randomElement($categoryIds),
                 'status' => fake()->randomElement(['available', 'unavailable']),
+                'price' => fake()->randomFloat(2, 10, 5000),
+                'min_order_quantity' => rand(1, 10),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);

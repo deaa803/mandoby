@@ -37,60 +37,57 @@ class ProductDetailController extends Controller
     }
 
     /**
-     * Store a newly created product detail.
+     * Create a product and its company-specific details in one request.
      *
-     * Company accounts do not send company_id from Flutter. The company is resolved
-     * from the authenticated Sanctum token.
+     * The company is always resolved from the authenticated Sanctum token.
+     * Flutter must not send product_id, company_id, or status when creating.
      */
     public function store(Request $request)
     {
         $company = $request->user()?->company;
 
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This route is available to company accounts only',
+                'data' => null,
+            ], 403);
+        }
+
         $validated = $request->validate([
-            'product_id' => ['nullable', 'exists:products,id'],
-            'product_name' => ['required_without:product_id', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
-            'company_id' => ['nullable', 'exists:companies,id'],
+            'product_id' => ['prohibited'],
+            'company_id' => ['prohibited'],
+            'status' => ['prohibited'],
+
+            'product_name' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:5000'],
             'category_id' => ['required', 'exists:categories,id'],
-            'status' => ['nullable', 'in:available,unavailable'],
-            'price' => ['nullable', 'numeric', 'min:0'],
+            'price' => ['required', 'numeric', 'gt:0'],
+            'min_order_quantity' => ['required', 'integer', 'min:1'],
 
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
             'features' => ['nullable', 'array'],
-            'features.*.feature_id' => ['required_with:features', 'exists:features,id'],
-            'features.*.value' => ['required_with:features', 'string', 'max:255'],
+            'features.*.feature_id' => ['required', 'integer', 'distinct', 'exists:features,id'],
+            'features.*.value' => ['required', 'string', 'max:255'],
         ]);
 
-        $companyId = $company?->id ?? ($validated['company_id'] ?? null);
-
-        if (!$companyId) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Company account not found',
-                'data' => null,
-            ], 404);
-        }
-
         try {
-            $productDetail = DB::transaction(function () use ($request, $validated, $companyId) {
-                $product = !empty($validated['product_id'])
-                    ? Product::findOrFail($validated['product_id'])
-                    : Product::create([
-                        'name' => $validated['product_name'],
-                        'description' => $validated['description'] ?? null,
-                        'min_order_quantity' => $validated['min_order_quantity'] ?? 1,
-                    ]);
+            $productDetail = DB::transaction(function () use ($request, $validated, $company) {
+                $product = Product::create([
+                    'name' => $validated['product_name'],
+                    'description' => $validated['description'],
+                ]);
 
                 $productDetail = ProductDetail::create([
                     'product_id' => $product->id,
-                    'company_id' => $companyId,
+                    'company_id' => $company->id,
                     'category_id' => $validated['category_id'],
-                    'status' => $validated['status'] ?? 'available',
-                    'price' => $validated['price'] ?? 0,
+                    'status' => 'available',
+                    'price' => $validated['price'],
+                    'min_order_quantity' => $validated['min_order_quantity'],
                 ]);
 
                 $featuresData = [];
@@ -118,14 +115,14 @@ class ProductDetailController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Product detail created successfully',
+                'message' => 'Product created successfully',
                 'data' => $productDetail->load($this->relations),
             ], 201);
 
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to create product detail',
+                'message' => 'Failed to create product',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -146,63 +143,73 @@ class ProductDetailController extends Controller
     }
 
     /**
-     * Update the specified product detail.
+     * Update a product owned by the authenticated company.
      */
     public function update(Request $request, ProductDetail $productDetail)
     {
+        $company = $request->user()?->company;
+
+        if (!$company || $productDetail->company_id !== $company->id) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to update this product',
+                'data' => null,
+            ], 403);
+        }
+
         $validated = $request->validate([
-            'product_id' => ['sometimes', 'required', 'exists:products,id'],
-            'product_name' => ['sometimes', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
-            'company_id' => ['sometimes', 'required', 'exists:companies,id'],
+            'product_id' => ['prohibited'],
+            'company_id' => ['prohibited'],
+
+            'product_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'description' => ['sometimes', 'required', 'string', 'max:5000'],
             'category_id' => ['sometimes', 'required', 'exists:categories,id'],
-            'status' => ['nullable', 'in:available,unavailable'],
-            'price' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['sometimes', 'required', 'in:available,unavailable'],
+            'price' => ['sometimes', 'required', 'numeric', 'gt:0'],
+            'min_order_quantity' => ['sometimes', 'required', 'integer', 'min:1'],
 
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
 
-            'features' => ['nullable', 'array'],
-            'features.*.feature_id' => ['required_with:features', 'exists:features,id'],
-            'features.*.value' => ['required_with:features', 'string', 'max:255'],
+            'features' => ['sometimes', 'array'],
+            'features.*.feature_id' => ['required', 'integer', 'distinct', 'exists:features,id'],
+            'features.*.value' => ['required', 'string', 'max:255'],
         ]);
 
         try {
             $updatedProductDetail = DB::transaction(function () use ($request, $validated, $productDetail) {
                 $productDetailData = collect($validated)
-                    ->only(['product_id', 'company_id', 'category_id', 'status', 'price'])
+                    ->only([
+                        'category_id',
+                        'status',
+                        'price',
+                        'min_order_quantity',
+                    ])
                     ->toArray();
 
                 if (!empty($productDetailData)) {
                     $productDetail->update($productDetailData);
                 }
 
-                if (isset($validated['product_name']) || array_key_exists('description', $validated) || array_key_exists('min_order_quantity', $validated)) {
-                    $productData = [];
+                $productData = [];
 
-                    if (isset($validated['product_name'])) {
-                        $productData['name'] = $validated['product_name'];
-                    }
+                if (array_key_exists('product_name', $validated)) {
+                    $productData['name'] = $validated['product_name'];
+                }
 
-                    if (array_key_exists('description', $validated)) {
-                        $productData['description'] = $validated['description'];
-                    }
+                if (array_key_exists('description', $validated)) {
+                    $productData['description'] = $validated['description'];
+                }
 
-                    if (array_key_exists('min_order_quantity', $validated)) {
-                        $productData['min_order_quantity'] = $validated['min_order_quantity'] ?? 1;
-                    }
-
-                    if (!empty($productData)) {
-                        $productDetail->product->update($productData);
-                    }
+                if (!empty($productData)) {
+                    $productDetail->product->update($productData);
                 }
 
                 if (array_key_exists('features', $validated)) {
                     $featuresData = [];
 
-                    foreach ($validated['features'] ?? [] as $feature) {
+                    foreach ($validated['features'] as $feature) {
                         $featuresData[$feature['feature_id']] = [
                             'value' => $feature['value'],
                         ];
@@ -216,6 +223,7 @@ class ProductDetailController extends Controller
                         if ($image->url) {
                             Storage::disk('public')->delete($image->url);
                         }
+
                         $image->delete();
                     }
 
@@ -231,26 +239,38 @@ class ProductDetailController extends Controller
 
             return response()->json([
                 'status' => true,
-                'message' => 'Product detail updated successfully',
+                'message' => 'Product updated successfully',
                 'data' => $updatedProductDetail,
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to update product detail',
+                'message' => 'Failed to update product',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Remove the specified product detail.
+     * Remove a product owned by the authenticated company.
      */
-    public function destroy(ProductDetail $productDetail)
+    public function destroy(Request $request, ProductDetail $productDetail)
     {
+        $company = $request->user()?->company;
+
+        if (!$company || $productDetail->company_id !== $company->id) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to delete this product',
+                'data' => null,
+            ], 403);
+        }
+
         try {
             DB::transaction(function () use ($productDetail) {
+                $product = $productDetail->product;
+
                 $productDetail->features()->detach();
 
                 if ($productDetail->model3d) {
@@ -261,30 +281,38 @@ class ProductDetailController extends Controller
                     if ($image->url) {
                         Storage::disk('public')->delete($image->url);
                     }
+
                     $image->delete();
                 }
 
                 $productDetail->delete();
+
+                if ($product && !$product->details()->exists()) {
+                    $product->delete();
+                }
             });
 
             return response()->json([
                 'status' => true,
-                'message' => 'Product detail deleted successfully',
+                'message' => 'Product deleted successfully',
                 'data' => null,
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to delete product detail',
+                'message' => 'Failed to delete product',
                 'error' => $e->getMessage(),
             ], 500);
         }
     }
 
+    /**
+     * Return products owned by the authenticated company.
+     */
     public function myCompanyProducts(Request $request)
     {
-        $company = $request->user()->company;
+        $company = $request->user()?->company;
 
         if (!$company) {
             return response()->json([

@@ -16,6 +16,7 @@ class ProductDetailInfolist
                 TextEntry::make('company.name_company')->label('الشركة'),
                 TextEntry::make('category.name')->label('التصنيف'),
                 TextEntry::make('price')->numeric(decimalPlaces: 2)->label('السعر'),
+                TextEntry::make('min_order_quantity')->numeric()->label('الحد الأدنى للطلب'),
                 TextEntry::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => $state === 'available' ? 'متوفر' : 'غير متوفر')

@@ -13,7 +13,6 @@ class ProductInfolist
             ->components([
                 TextEntry::make('name')->label('اسم المنتج'),
                 TextEntry::make('description')->label('الوصف')->placeholder('-')->columnSpanFull(),
-                TextEntry::make('min_order_quantity')->label('الحد الأدنى للطلب'),
                 TextEntry::make('details_count')->state(fn ($record): int => $record->details()->count())->label('عدد عروض الشركات'),
                 TextEntry::make('created_at')->dateTime()->label('تاريخ الإنشاء'),
                 TextEntry::make('updated_at')->dateTime()->label('آخر تحديث'),

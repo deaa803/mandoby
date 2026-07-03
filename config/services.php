@@ -34,5 +34,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'sf3d' => [
+        'project_dir' => env('SF3D_PROJECT_DIR'),
+        'python' => env('SF3D_PYTHON'),
+        'run_script' => env('SF3D_RUN_SCRIPT'),
+        'use_cpu' => env('SF3D_USE_CPU', true),
+    ],
 
 ];

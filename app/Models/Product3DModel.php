@@ -23,6 +23,7 @@ class Product3DModel extends Model
         'error_message',
         'metadata',
         'generated_at',
+        'started_at',
     ];
 
     protected $appends = [
@@ -37,6 +38,7 @@ class Product3DModel extends Model
             'progress' => 'integer',
             'metadata' => 'array',
             'generated_at' => 'datetime',
+            'started_at' => 'datetime',
         ];
     }
 

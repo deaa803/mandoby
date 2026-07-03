@@ -18,6 +18,7 @@ use App\Http\Controllers\ProductDetailController;
 use App\Http\Controllers\Product3DModelController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\TestPushController;
+use App\Http\Middleware\CheckUserType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -328,55 +329,46 @@ Route::middleware('auth:sanctum')->group(function () {
     |--------------------------------------------------------------------------
     | Company 3D Models Routes
     |--------------------------------------------------------------------------
+    |
+    | هذه المسارات مخصصة للمستخدم المسجل من نوع company فقط.
+    | إنشاء النتيجة وتحديث الحالة يتمان تلقائياً من خلال Queue Job.
+    |
     */
 
-    /**
-     * جلب جميع الموديلات ثلاثية الأبعاد التابعة للشركة الحالية.
-     */
-    Route::get('/company/3d-models', [
-        Product3DModelController::class,
-        'index',
-    ]);
+    Route::middleware(CheckUserType::class . ':company')->group(function () {
 
-    /**
-     * إنشاء طلب موديل ثلاثي الأبعاد جديد لمنتج.
-     */
-    Route::post('/company/3d-models', [
-        Product3DModelController::class,
-        'store',
-    ]);
+        /**
+         * جلب جميع عمليات وموديلات 3D التابعة للشركة الحالية.
+         */
+        Route::get('/company/3d-models', [
+            Product3DModelController::class,
+            'index',
+        ]);
 
-    /**
-     * جلب تفاصيل موديل ثلاثي الأبعاد محدد.
-     */
-    Route::get('/company/3d-models/{model3d}', [
-        Product3DModelController::class,
-        'show',
-    ]);
+        /**
+         * رفع صورة منتج وبدء إنشاء موديل 3D في الخلفية.
+         */
+        Route::post('/company/3d-models', [
+            Product3DModelController::class,
+            'store',
+        ]);
 
-    /**
-     * تعديل بيانات أو حالة موديل ثلاثي الأبعاد.
-     */
-    Route::patch('/company/3d-models/{model3d}', [
-        Product3DModelController::class,
-        'update',
-    ]);
+        /**
+         * جلب تفاصيل العملية وحالة إنشاء موديل 3D محدد.
+         */
+        Route::get('/company/3d-models/{model3d}', [
+            Product3DModelController::class,
+            'show',
+        ]);
 
-    /**
-     * رفع أو تحديث نتيجة إنشاء الموديل ثلاثي الأبعاد.
-     */
-    Route::post('/company/3d-models/{model3d}/result', [
-        Product3DModelController::class,
-        'update',
-    ]);
-
-    /**
-     * حذف موديل ثلاثي الأبعاد محدد.
-     */
-    Route::delete('/company/3d-models/{model3d}', [
-        Product3DModelController::class,
-        'destroy',
-    ]);
+        /**
+         * حذف عملية 3D وملفاتها التابعة للشركة الحالية.
+         */
+        Route::delete('/company/3d-models/{model3d}', [
+            Product3DModelController::class,
+            'destroy',
+        ]);
+    });
 
 
     /*

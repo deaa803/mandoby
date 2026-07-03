@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GenerateProduct3DModelJob;
 use App\Models\Product3DModel;
 use App\Models\ProductDetail;
 use Illuminate\Http\Request;
@@ -53,55 +54,249 @@ class Product3DModelController extends Controller
             ], 404);
         }
 
-        $validated = $request->validate([
-            'product_detail_id' => ['required', 'exists:product_details,id'],
-            'source_image' => ['required_without:image', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'metadata' => ['nullable', 'array'],
-        ]);
+        /*
+        |--------------------------------------------------------------------------
+        | التحقق من تفعيل خدمة 3D للشركة
+        |--------------------------------------------------------------------------
+        */
 
-        $productDetail = ProductDetail::where('id', $validated['product_detail_id'])
-            ->where('company_id', $company->id)
-            ->first();
-
-        if (!$productDetail) {
+        if (!$company->has_3d_access) {
             return response()->json([
                 'status' => false,
-                'message' => 'The selected product does not belong to this company',
+                'message' => '3D model generation is not enabled for this company',
                 'data' => null,
             ], 403);
         }
 
-        if ($productDetail->model3d()->exists()) {
+        /*
+        |--------------------------------------------------------------------------
+        | التحقق من انتهاء الاشتراك
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $company->model_3d_expires_at &&
+            $company->model_3d_expires_at->isPast()
+        ) {
             return response()->json([
                 'status' => false,
-                'message' => 'This product already has a 3D model record',
-                'data' => $productDetail->model3d()->first(),
+                'message' => 'Your 3D model subscription has expired',
+                'data' => null,
+            ], 403);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | التحقق من البيانات المرسلة
+        |--------------------------------------------------------------------------
+        */
+
+        $validated = $request->validate([
+            'product_detail_id' => [
+                'required',
+                'integer',
+                'exists:product_details,id',
+            ],
+
+            'source_image' => [
+                'required_without:image',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:10240',
+            ],
+
+            'image' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:10240',
+            ],
+
+            'metadata' => [
+                'nullable',
+                'array',
+            ],
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | جلب المنتج والتأكد أنه تابع للشركة
+        |--------------------------------------------------------------------------
+        */
+
+        $productDetail = ProductDetail::find(
+            $validated['product_detail_id']
+        );
+
+        if (!$productDetail) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Product detail not found',
+                'data' => null,
+            ], 404);
+        }
+
+        if ((int) $productDetail->company_id !== (int) $company->id) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not authorized to generate a 3D model for this product',
+                'data' => null,
+            ], 403);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | تحديد ملف الصورة
+        |--------------------------------------------------------------------------
+        |
+        | يقبل الـ API اسم الحقل source_image أو image.
+        |
+        */
+
+        $uploadedImage = $request->file('source_image')
+            ?? $request->file('image');
+
+        if (!$uploadedImage) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Source image is required',
+                'data' => null,
             ], 422);
         }
 
-        $sourceImage = $request->file('source_image') ?? $request->file('image');
-        $sourceImagePath = $sourceImage->store('product-3d/source-images', 'public');
+        /*
+        |--------------------------------------------------------------------------
+        | فحص وجود عملية سابقة للمنتج
+        |--------------------------------------------------------------------------
+        */
 
-        $model = Product3DModel::create([
-            'product_detail_id' => $productDetail->id,
-            'company_id' => $company->id,
-            'source_image' => $sourceImagePath,
-            'status' => 'pending',
-            'progress' => 0,
-            'metadata' => $validated['metadata'] ?? null,
-        ]);
+        $model = Product3DModel::where(
+            'product_detail_id',
+            $productDetail->id
+        )->first();
+
+        /*
+        |--------------------------------------------------------------------------
+        | منع إنشاء عمليتين بنفس الوقت
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $model &&
+            in_array($model->status, ['pending', 'processing'], true)
+        ) {
+            return response()->json([
+                'status' => false,
+                'message' => 'A 3D model generation process is already running for this product',
+                'data' => $model->load($this->relations),
+            ], 422);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | تخزين صورة المصدر
+        |--------------------------------------------------------------------------
+        */
+
+        $sourceImagePath = $uploadedImage->store(
+            'product-3d/source-images',
+            'public'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | إعادة التوليد إذا كان السجل موجوداً
+        |--------------------------------------------------------------------------
+        */
+
+        if ($model) {
+            $oldSourceImage = $model->source_image;
+            $oldModelFile = $model->model_file;
+            $oldThumbnail = $model->thumbnail;
+
+            $model->update([
+                'company_id' => $company->id,
+                'product_detail_id' => $productDetail->id,
+                'source_image' => $sourceImagePath,
+                'model_file' => null,
+                'thumbnail' => null,
+                'status' => 'pending',
+                'progress' => 0,
+                'error_message' => null,
+                'metadata' => $validated['metadata']
+                    ?? $model->metadata,
+                'started_at' => null,
+                'generated_at' => null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | حذف الملفات القديمة
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $oldSourceImage &&
+                $oldSourceImage !== $sourceImagePath
+            ) {
+                Storage::disk('public')->delete($oldSourceImage);
+            }
+
+            if ($oldModelFile) {
+                Storage::disk('public')->delete($oldModelFile);
+            }
+
+            if ($oldThumbnail) {
+                Storage::disk('public')->delete($oldThumbnail);
+            }
+        } else {
+            /*
+            |--------------------------------------------------------------------------
+            | إنشاء سجل جديد
+            |--------------------------------------------------------------------------
+            */
+
+            $model = Product3DModel::create([
+                'product_detail_id' => $productDetail->id,
+                'company_id' => $company->id,
+                'source_image' => $sourceImagePath,
+                'model_file' => null,
+                'thumbnail' => null,
+                'status' => 'pending',
+                'progress' => 0,
+                'error_message' => null,
+                'metadata' => $validated['metadata'] ?? null,
+                'started_at' => null,
+                'generated_at' => null,
+            ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | إرسال عملية التوليد إلى Queue
+        |--------------------------------------------------------------------------
+        */
+
+        GenerateProduct3DModelJob::dispatch($model->id)
+            ->onQueue('3d');
 
         return response()->json([
             'status' => true,
-            'message' => '3D model request created successfully',
-            'data' => $model->load($this->relations),
-        ], 201);
+            'message' => '3D model generation started successfully',
+            'data' => $model->fresh()->load($this->relations),
+        ], 202);
     }
 
-    public function show(Request $request, Product3DModel $model3d)
-    {
-        if (!$this->belongsToAuthenticatedCompany($request, $model3d)) {
+    public function show(
+        Request $request,
+        Product3DModel $model3d
+    ) {
+        if (
+            !$this->belongsToAuthenticatedCompany(
+                $request,
+                $model3d
+            )
+        ) {
             return response()->json([
                 'status' => false,
                 'message' => 'You are not authorized to access this 3D model',
@@ -116,9 +311,16 @@ class Product3DModelController extends Controller
         ]);
     }
 
-    public function update(Request $request, Product3DModel $model3d)
-    {
-        if (!$this->belongsToAuthenticatedCompany($request, $model3d)) {
+    public function update(
+        Request $request,
+        Product3DModel $model3d
+    ) {
+        if (
+            !$this->belongsToAuthenticatedCompany(
+                $request,
+                $model3d
+            )
+        ) {
             return response()->json([
                 'status' => false,
                 'message' => 'You are not authorized to update this 3D model',
@@ -127,23 +329,59 @@ class Product3DModelController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => ['nullable', 'in:pending,processing,completed,failed'],
-            'progress' => ['nullable', 'integer', 'between:0,100'],
-            'error_message' => ['nullable', 'string'],
-            'metadata' => ['nullable', 'array'],
-            'model_file' => ['nullable', 'file', 'max:102400'],
-            'thumbnail' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'source_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'status' => [
+                'nullable',
+                'in:pending,processing,completed,failed',
+            ],
+
+            'progress' => [
+                'nullable',
+                'integer',
+                'between:0,100',
+            ],
+
+            'error_message' => [
+                'nullable',
+                'string',
+            ],
+
+            'metadata' => [
+                'nullable',
+                'array',
+            ],
+
+            'model_file' => [
+                'nullable',
+                'file',
+                'max:102400',
+            ],
+
+            'thumbnail' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:10240',
+            ],
+
+            'source_image' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:10240',
+            ],
         ]);
 
         if ($request->hasFile('model_file')) {
             $this->validateModelExtension($request);
 
             if ($model3d->model_file) {
-                Storage::disk('public')->delete($model3d->model_file);
+                Storage::disk('public')->delete(
+                    $model3d->model_file
+                );
             }
 
-            $validated['model_file'] = $request->file('model_file')
+            $validated['model_file'] = $request
+                ->file('model_file')
                 ->store('product-3d/models', 'public');
 
             $validated['status'] = 'completed';
@@ -154,40 +392,56 @@ class Product3DModelController extends Controller
 
         if ($request->hasFile('thumbnail')) {
             if ($model3d->thumbnail) {
-                Storage::disk('public')->delete($model3d->thumbnail);
+                Storage::disk('public')->delete(
+                    $model3d->thumbnail
+                );
             }
 
-            $validated['thumbnail'] = $request->file('thumbnail')
+            $validated['thumbnail'] = $request
+                ->file('thumbnail')
                 ->store('product-3d/thumbnails', 'public');
         }
 
         if ($request->hasFile('source_image')) {
             if ($model3d->source_image) {
-                Storage::disk('public')->delete($model3d->source_image);
+                Storage::disk('public')->delete(
+                    $model3d->source_image
+                );
             }
 
-            $validated['source_image'] = $request->file('source_image')
+            $validated['source_image'] = $request
+                ->file('source_image')
                 ->store('product-3d/source-images', 'public');
 
             if ($model3d->model_file) {
-                Storage::disk('public')->delete($model3d->model_file);
+                Storage::disk('public')->delete(
+                    $model3d->model_file
+                );
+
                 $validated['model_file'] = null;
             }
 
             if ($model3d->thumbnail) {
-                Storage::disk('public')->delete($model3d->thumbnail);
+                Storage::disk('public')->delete(
+                    $model3d->thumbnail
+                );
+
                 $validated['thumbnail'] = null;
             }
 
             if (!$request->filled('status')) {
                 $validated['status'] = 'pending';
                 $validated['progress'] = 0;
+                $validated['started_at'] = null;
                 $validated['generated_at'] = null;
                 $validated['error_message'] = null;
             }
         }
 
-        if (($validated['status'] ?? null) === 'failed' && !array_key_exists('progress', $validated)) {
+        if (
+            ($validated['status'] ?? null) === 'failed' &&
+            !array_key_exists('progress', $validated)
+        ) {
             $validated['progress'] = 0;
         }
 
@@ -196,18 +450,45 @@ class Product3DModelController extends Controller
         return response()->json([
             'status' => true,
             'message' => '3D model updated successfully',
-            'data' => $model3d->fresh()->load($this->relations),
+            'data' => $model3d
+                ->fresh()
+                ->load($this->relations),
         ]);
     }
 
-    public function destroy(Request $request, Product3DModel $model3d)
-    {
-        if (!$this->belongsToAuthenticatedCompany($request, $model3d)) {
+    public function destroy(
+        Request $request,
+        Product3DModel $model3d
+    ) {
+        if (
+            !$this->belongsToAuthenticatedCompany(
+                $request,
+                $model3d
+            )
+        ) {
             return response()->json([
                 'status' => false,
                 'message' => 'You are not authorized to delete this 3D model',
                 'data' => null,
             ], 403);
+        }
+
+        if ($model3d->source_image) {
+            Storage::disk('public')->delete(
+                $model3d->source_image
+            );
+        }
+
+        if ($model3d->model_file) {
+            Storage::disk('public')->delete(
+                $model3d->model_file
+            );
+        }
+
+        if ($model3d->thumbnail) {
+            Storage::disk('public')->delete(
+                $model3d->thumbnail
+            );
         }
 
         $model3d->delete();
@@ -219,8 +500,9 @@ class Product3DModelController extends Controller
         ]);
     }
 
-    public function forProduct(ProductDetail $productDetail)
-    {
+    public function forProduct(
+        ProductDetail $productDetail
+    ) {
         $model = $productDetail->model3d()
             ->where('status', 'completed')
             ->whereNotNull('model_file')
@@ -236,21 +518,38 @@ class Product3DModelController extends Controller
         ]);
     }
 
-    private function belongsToAuthenticatedCompany(Request $request, Product3DModel $model): bool
-    {
+    private function belongsToAuthenticatedCompany(
+        Request $request,
+        Product3DModel $model
+    ): bool {
         $company = $request->user()?->company;
 
-        return $company && $model->company_id === $company->id;
+        return $company &&
+            (int) $model->company_id === (int) $company->id;
     }
 
-    private function validateModelExtension(Request $request): void
-    {
-        $allowedExtensions = ['glb', 'gltf', 'obj', 'fbx', 'zip'];
-        $extension = strtolower($request->file('model_file')->getClientOriginalExtension());
+    private function validateModelExtension(
+        Request $request
+    ): void {
+        $allowedExtensions = [
+            'glb',
+            'gltf',
+            'obj',
+            'fbx',
+            'zip',
+        ];
+
+        $extension = strtolower(
+            $request
+                ->file('model_file')
+                ->getClientOriginalExtension()
+        );
 
         if (!in_array($extension, $allowedExtensions, true)) {
             throw ValidationException::withMessages([
-                'model_file' => ['The model file must be one of: glb, gltf, obj, fbx, zip.'],
+                'model_file' => [
+                    'The model file must be one of: glb, gltf, obj, fbx, zip.',
+                ],
             ]);
         }
     }

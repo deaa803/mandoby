@@ -14,8 +14,14 @@ class Company extends Model
         'name_company',
         'description',
         'logo',
+        'has_3d_access',
+        'model_3d_expires_at',
     ];
 
+    protected $casts = [
+        'has_3d_access' => 'boolean',
+        'model_3d_expires_at' => 'datetime',
+    ];
     public function user()
     {
         return $this->belongsTo(User::class);

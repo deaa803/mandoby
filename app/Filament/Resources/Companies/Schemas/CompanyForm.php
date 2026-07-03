@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\Companies\Schemas;
 
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -19,7 +21,8 @@ class CompanyForm
                     ->relationship(
                         name: 'user',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $query): Builder => $query->where('user_type', 'company'),
+                        modifyQueryUsing: fn (Builder $query): Builder =>
+                        $query->where('user_type', 'company'),
                     )
                     ->searchable(['name', 'email'])
                     ->preload()
@@ -43,6 +46,22 @@ class CompanyForm
                     ->directory('companies')
                     ->visibility('public')
                     ->label('شعار الشركة'),
+
+                Toggle::make('has_3d_access')
+                    ->label('تفعيل خدمة إنشاء موديلات 3D')
+                    ->helperText('تُفعّل هذه الخدمة فقط للشركات المشتركة والدافعة')
+                    ->default(false)
+                    ->live(),
+
+                DateTimePicker::make('model_3d_expires_at')
+                    ->label('تاريخ انتهاء اشتراك خدمة 3D')
+                    ->helperText('اترك الحقل فارغاً إذا كان الاشتراك بدون تاريخ انتهاء')
+                    ->seconds(false)
+                    ->nullable()
+                    ->visible(
+                        fn ($get): bool =>
+                        (bool) $get('has_3d_access')
+                    ),
             ]);
     }
 }

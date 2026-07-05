@@ -22,21 +22,16 @@ class DriverForm
                     )
                     ->searchable(['name', 'email'])
                     ->preload()
+                    ->unique(table: 'drivers', column: 'user_id', ignoreRecord: true)
                     ->required()
                     ->label('حساب السائق'),
-
-                Select::make('company_id')
-                    ->relationship('company', 'name_company')
-                    ->searchable()
-                    ->preload()
-                    ->required()
-                    ->label('الشركة'),
 
                 Select::make('company_car_id')
                     ->relationship('car', 'plate_number')
                     ->searchable()
                     ->preload()
-                    ->nullable()
+                    ->unique(table: 'drivers', column: 'company_car_id', ignoreRecord: true)
+                    ->required()
                     ->label('السيارة'),
 
                 Select::make('status')

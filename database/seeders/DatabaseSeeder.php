@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -101,6 +101,8 @@ class DatabaseSeeder extends Seeder
                 'name_company' => "Company {$i}",
                 'description' => "Test company description {$i}",
                 'logo' => null,
+                'has_3d_access' => false,
+                'model_3d_expires_at' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -110,31 +112,54 @@ class DatabaseSeeder extends Seeder
         |--------------------------------------------------------------------------
         | Company Cars
         |--------------------------------------------------------------------------
+        |
+        | توزيع السيارات بالتسلسل:
+        | السيارة 1 للشركة 1، السيارة 2 للشركة 2 ... السيارة 10 للشركة 10،
+        | ثم يبدأ التوزيع من الشركة 1 مرة ثانية.
+        |
         */
 
-        $carIds = [];
+        $cars = [];
 
         for ($i = 1; $i <= 20; $i++) {
-            $carIds[] = DB::table('company_cars')->insertGetId([
-                'company_id' => fake()->randomElement($companyIds),
-                'vehicle_type' => fake()->randomElement(['Van', 'Pickup', 'Truck', 'Motorcycle']),
-                'driver_name' => "Driver Car {$i}",
-                'plate_number' => 'SY-' . rand(100000, 999999),
+            $companyIndex = ($i - 1) % count($companyIds);
+            $companyId = $companyIds[$companyIndex];
+
+            $carId = DB::table('company_cars')->insertGetId([
+                'company_id' => $companyId,
+                'vehicle_type' => fake()->randomElement([
+                    'Van',
+                    'Pickup',
+                    'Truck',
+                    'Motorcycle',
+                ]),
+                'plate_number' => 'SY-' . str_pad((string) $i, 6, '0', STR_PAD_LEFT),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            $cars[] = [
+                'id' => $carId,
+                'company_id' => $companyId,
+            ];
         }
 
         /*
         |--------------------------------------------------------------------------
         | Drivers
         |--------------------------------------------------------------------------
+        |
+        | لا يوجد company_id في drivers.
+        | الشركة تُعرف دائماً من company_car_id، لذلك لا يمكن حدوث تضارب.
+        | السائق 1 مرتبط بالسيارة 1، والسائق 2 بالسيارة 2، وهكذا.
+        |
         */
 
         $driverIds = [];
+        $driverIdsByCompany = [];
 
         for ($i = 1; $i <= 5; $i++) {
-            $companyId = fake()->randomElement($companyIds);
+            $car = $cars[$i - 1];
 
             $userId = DB::table('users')->insertGetId([
                 'name' => "Driver User {$i}",
@@ -150,17 +175,24 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => $now,
             ]);
 
-            $driverIds[] = DB::table('drivers')->insertGetId([
+            $driverId = DB::table('drivers')->insertGetId([
                 'user_id' => $userId,
-                'company_id' => $companyId,
-                'company_car_id' => fake()->randomElement($carIds),
-                'status' => fake()->randomElement(['available', 'busy', 'offline']),
+                'company_car_id' => $car['id'],
+                'fcm_token' => null,
+                'status' => fake()->randomElement([
+                    'available',
+                    'busy',
+                    'offline',
+                ]),
                 'current_lat' => fake()->randomFloat(7, 33.4000000, 36.4000000),
                 'current_lng' => fake()->randomFloat(7, 35.5000000, 38.5000000),
                 'last_location_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            $driverIds[] = $driverId;
+            $driverIdsByCompany[$car['company_id']][] = $driverId;
         }
 
         /*
@@ -276,11 +308,16 @@ class DatabaseSeeder extends Seeder
         */
 
         $productDetailIds = [];
+        $productDetails = [];
+        $productDetailsByCompany = [];
 
         for ($i = 1; $i <= 40; $i++) {
-            $productDetailIds[] = DB::table('product_details')->insertGetId([
+            $companyIndex = ($i - 1) % count($companyIds);
+            $companyId = $companyIds[$companyIndex];
+
+            $productDetailId = DB::table('product_details')->insertGetId([
                 'product_id' => fake()->randomElement($productIds),
-                'company_id' => fake()->randomElement($companyIds),
+                'company_id' => $companyId,
                 'category_id' => fake()->randomElement($categoryIds),
                 'status' => fake()->randomElement(['available', 'unavailable']),
                 'price' => fake()->randomFloat(2, 10, 5000),
@@ -288,6 +325,15 @@ class DatabaseSeeder extends Seeder
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+
+            $productDetailIds[] = $productDetailId;
+
+            $productDetails[] = [
+                'id' => $productDetailId,
+                'company_id' => $companyId,
+            ];
+
+            $productDetailsByCompany[$companyId][] = $productDetailId;
         }
 
         /*
@@ -343,15 +389,21 @@ class DatabaseSeeder extends Seeder
         for ($i = 1; $i <= 20; $i++) {
             $startsAt = now()->subDays(rand(0, 10));
             $endsAt = now()->addDays(rand(5, 30));
+            $productDetail = fake()->randomElement($productDetails);
 
             DB::table('advertisements')->insert([
-                'company_id' => fake()->randomElement($companyIds),
-                'product_detail_id' => fake()->randomElement($productDetailIds),
+                'company_id' => $productDetail['company_id'],
+                'product_detail_id' => $productDetail['id'],
                 'title' => "Special Offer {$i}",
                 'description' => "Advertisement description {$i}",
                 'image' => "advertisements/ad-{$i}.jpg",
                 'price' => rand(10000, 250000),
-                'status' => fake()->randomElement(['pending', 'active', 'rejected', 'expired']),
+                'status' => fake()->randomElement([
+                    'pending',
+                    'active',
+                    'rejected',
+                    'expired',
+                ]),
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'created_at' => $now,
@@ -363,6 +415,10 @@ class DatabaseSeeder extends Seeder
         |--------------------------------------------------------------------------
         | Orders + Order Product Details + Payments
         |--------------------------------------------------------------------------
+        |
+        | كل طلب تجريبي يحتوي منتجات من شركة واحدة فقط.
+        | وعند إسناد سائق، يتم اختياره من نفس شركة منتجات الطلب.
+        |
         */
 
         for ($i = 1; $i <= 30; $i++) {
@@ -374,11 +430,21 @@ class DatabaseSeeder extends Seeder
                 'cancelled',
             ]);
 
-            $assignedDriverId = in_array($status, ['delivering', 'delivered'])
-                ? fake()->randomElement($driverIds)
-                : null;
+            if (in_array($status, ['delivering', 'delivered'], true)) {
+                $eligibleCompanyIds = array_keys($driverIdsByCompany);
+                $companyId = fake()->randomElement($eligibleCompanyIds);
+                $assignedDriverId = fake()->randomElement($driverIdsByCompany[$companyId]);
+            } else {
+                $companyId = fake()->randomElement($companyIds);
+                $assignedDriverId = null;
+            }
 
-            $selectedProductDetails = fake()->randomElements($productDetailIds, rand(1, 4));
+            $availableProductDetails = $productDetailsByCompany[$companyId];
+            $lineCount = min(rand(1, 4), count($availableProductDetails));
+            $selectedProductDetails = fake()->randomElements(
+                $availableProductDetails,
+                $lineCount
+            );
 
             $lines = [];
             $totalPrice = 0;
@@ -388,7 +454,7 @@ class DatabaseSeeder extends Seeder
                 $quantity = rand(1, 10);
                 $discount = rand(0, 5000);
 
-                $lineTotal = ($price * $quantity) - $discount;
+                $lineTotal = max(0, ($price * $quantity) - $discount);
                 $totalPrice += $lineTotal;
 
                 $lines[] = [

@@ -27,8 +27,12 @@ return new class extends Migration
                 ->default('available');
 
             $table->decimal('price', 15, 2)->default(0);
+            $table->unsignedInteger('min_order_quantity')->default(1);
 
             $table->timestamps();
+
+            $table->index(['company_id', 'status']);
+            $table->index(['category_id', 'status']);
         });
     }
 

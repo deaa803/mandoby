@@ -56,6 +56,16 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::deleting(function (User $user): void {
+            // حذف الشركة عبر Eloquent أولاً حتى تُحذف حسابات سائقيها قبل السيارات.
+            if ($user->user_type === 'company' && $user->company) {
+                $user->company->delete();
+            }
+        });
+    }
+
     public function company()
     {
         return $this->hasOne(Company::class);

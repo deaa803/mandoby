@@ -338,7 +338,9 @@ class OrderController extends Controller
         ]);
 
         $driver = Driver::where('id', $validated['driver_id'])
-            ->where('company_id', $user->company->id)
+            ->whereHas('car', function ($query) use ($user) {
+                $query->where('company_id', $user->company->id);
+            })
             ->first();
 
         if (!$driver) {
@@ -367,7 +369,7 @@ class OrderController extends Controller
         $order->load([
             'store.user',
             'driver.user',
-            'driver.company',
+            'driver.car.company',
             'productDetails.product',
             'productDetails.category',
             'productDetails.images',

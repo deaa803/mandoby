@@ -18,8 +18,8 @@ class DriversTable
             ->columns([
                 TextColumn::make('user.name')->label('السائق')->searchable()->sortable(),
                 TextColumn::make('user.email')->label('البريد الإلكتروني')->searchable(),
-                TextColumn::make('company.name_company')->label('الشركة')->searchable()->sortable(),
-                TextColumn::make('car.plate_number')->label('رقم اللوحة')->searchable()->placeholder('-'),
+                TextColumn::make('car.company.name_company')->label('الشركة')->searchable()->sortable(),
+                TextColumn::make('car.plate_number')->label('رقم اللوحة')->searchable(),
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {

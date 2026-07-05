@@ -8,15 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('drivers', function (Blueprint $table) {
-            $table->text('fcm_token')->nullable()->after('id');
+        Schema::create('products', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::table('drivers', function (Blueprint $table) {
-            $table->dropColumn('fcm_token');
-        });
+        Schema::dropIfExists('products');
     }
 };

@@ -16,8 +16,7 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->string('vehicle_type');
-            $table->string('driver_name');
-            $table->string('plate_number');
+            $table->string('plate_number')->unique();
 
             $table->timestamps();
         });

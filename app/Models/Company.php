@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Company extends Model
 {
@@ -22,6 +22,19 @@ class Company extends Model
         'has_3d_access' => 'boolean',
         'model_3d_expires_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Company $company): void {
+            // منع تعارض الحذف: احذف حسابات السائقين قبل حذف سيارات الشركة.
+            $company->loadMissing('cars.driver.user');
+
+            foreach ($company->cars as $car) {
+                $car->driver?->user?->delete();
+            }
+        });
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -46,8 +59,16 @@ class Company extends Model
 
     public function drivers()
     {
-        return $this->hasMany(Driver::class, 'company_id');
+        return $this->hasManyThrough(
+            Driver::class,
+            CompanyCar::class,
+            'company_id',
+            'company_car_id',
+            'id',
+            'id'
+        );
     }
+
     public function advertisements()
     {
         return $this->hasMany(Advertisement::class, 'company_id');

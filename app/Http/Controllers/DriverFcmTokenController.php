@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Driver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DriverFcmTokenController extends Controller
 {
@@ -11,14 +12,20 @@ class DriverFcmTokenController extends Controller
     {
         $validated = $request->validate([
             'driver_id' => ['required', 'exists:drivers,id'],
-            'fcm_token' => ['required', 'string'],
+            'fcm_token' => ['required', 'string', 'max:512'],
         ]);
 
         $driver = Driver::findOrFail($validated['driver_id']);
 
-        $driver->update([
-            'fcm_token' => $validated['fcm_token'],
-        ]);
+        DB::transaction(function () use ($validated, $driver) {
+            Driver::where('fcm_token', $validated['fcm_token'])
+                ->where('id', '!=', $driver->id)
+                ->update(['fcm_token' => null]);
+
+            $driver->update([
+                'fcm_token' => $validated['fcm_token'],
+            ]);
+        });
 
         return response()->json([
             'status' => true,

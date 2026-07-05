@@ -26,9 +26,10 @@ class CompanyCarsTable
                     ->label('رقم اللوحة')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('driver_name')
+                TextColumn::make('driver.user.name')
                     ->label('اسم السائق')
-                    ->searchable(),
+                    ->searchable()
+                    ->placeholder('-'),
                 TextColumn::make('driver.user.email')
                     ->label('بريد السائق')
                     ->searchable()

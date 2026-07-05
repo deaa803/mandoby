@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Driver;
 use App\Models\Order;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DriverAppController extends Controller
 {
     public function profile(Request $request)
     {
-        $user = $request->user()->load('driver.company');
+        $user = $request->user()->load('driver.car.company');
 
         if ($user->user_type !== 'driver') {
             return response()->json([
@@ -18,10 +20,10 @@ class DriverAppController extends Controller
             ], 403);
         }
 
-        if (!$user->driver) {
+        if (! $user->driver || ! $user->driver->car) {
             return response()->json([
                 'status' => false,
-                'message' => 'Driver profile not found',
+                'message' => 'Driver profile or assigned car not found',
             ], 404);
         }
 
@@ -35,12 +37,14 @@ class DriverAppController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
-                    'address' => $user->address,
-                    'company_id' => $user->driver->company_id,
-                    'company_name' => $user->driver->company?->name_company,
-                    'vehicle_type' => $user->driver->vehicle_type,
-                    'plate_number' => $user->driver->plate_number,
-                    'is_active' => $user->driver->is_active,
+                    'latitude' => $user->latitude,
+                    'longitude' => $user->longitude,
+                    'company_id' => $user->driver->car->company_id,
+                    'company_name' => $user->driver->car->company?->name_company,
+                    'company_car_id' => $user->driver->company_car_id,
+                    'vehicle_type' => $user->driver->car->vehicle_type,
+                    'plate_number' => $user->driver->car->plate_number,
+                    'status' => $user->driver->status,
                 ],
             ],
         ]);
@@ -49,7 +53,7 @@ class DriverAppController extends Controller
     public function saveFcmToken(Request $request)
     {
         $validated = $request->validate([
-            'fcm_token' => ['required', 'string'],
+            'fcm_token' => ['required', 'string', 'max:512'],
         ]);
 
         $user = $request->user()->load('driver');
@@ -61,16 +65,22 @@ class DriverAppController extends Controller
             ], 403);
         }
 
-        if (!$user->driver) {
+        if (! $user->driver) {
             return response()->json([
                 'status' => false,
                 'message' => 'Driver profile not found',
             ], 404);
         }
 
-        $user->driver->update([
-            'fcm_token' => $validated['fcm_token'],
-        ]);
+        DB::transaction(function () use ($validated, $user) {
+            Driver::where('fcm_token', $validated['fcm_token'])
+                ->where('id', '!=', $user->driver->id)
+                ->update(['fcm_token' => null]);
+
+            $user->driver->update([
+                'fcm_token' => $validated['fcm_token'],
+            ]);
+        });
 
         return response()->json([
             'status' => true,
@@ -80,6 +90,7 @@ class DriverAppController extends Controller
             ],
         ]);
     }
+
     public function currentOrder(Request $request)
     {
         $user = $request->user()->load('driver');
@@ -91,7 +102,7 @@ class DriverAppController extends Controller
             ], 403);
         }
 
-        if (!$user->driver) {
+        if (! $user->driver) {
             return response()->json([
                 'status' => false,
                 'message' => 'Driver profile not found',
@@ -110,7 +121,7 @@ class DriverAppController extends Controller
             ->latest()
             ->first();
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'status' => true,
                 'message' => 'No current order found',
@@ -121,9 +132,7 @@ class DriverAppController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Current order found',
-            'data' => [
-                'order' => $order,
-            ],
+            'data' => ['order' => $order],
         ]);
     }
 
@@ -138,7 +147,7 @@ class DriverAppController extends Controller
             ], 403);
         }
 
-        if (!$user->driver) {
+        if (! $user->driver) {
             return response()->json([
                 'status' => false,
                 'message' => 'Driver profile not found',
@@ -157,24 +166,15 @@ class DriverAppController extends Controller
             ->latest()
             ->get();
 
-        if ($orders->isEmpty()) {
-            return response()->json([
-                'status' => true,
-                'message' => 'No delivered orders found',
-                'data' => [
-                    'orders' => [],
-                ],
-            ]);
-        }
-
         return response()->json([
             'status' => true,
-            'message' => 'Delivered orders found',
-            'data' => [
-                'orders' => $orders,
-            ],
+            'message' => $orders->isEmpty()
+                ? 'No delivered orders found'
+                : 'Delivered orders found',
+            'data' => ['orders' => $orders],
         ]);
     }
+
     public function markAsDelivered(Request $request, Order $order)
     {
         $user = $request->user()->load('driver');
@@ -186,7 +186,7 @@ class DriverAppController extends Controller
             ], 403);
         }
 
-        if (!$user->driver) {
+        if (! $user->driver) {
             return response()->json([
                 'status' => false,
                 'message' => 'Driver profile not found',
@@ -204,15 +204,11 @@ class DriverAppController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Order already delivered',
-                'data' => [
-                    'order' => $order,
-                ],
+                'data' => ['order' => $order],
             ]);
         }
 
-        $order->update([
-            'status' => 'delivered',
-        ]);
+        $order->update(['status' => 'delivered']);
 
         $order->load([
             'store.user',
@@ -225,9 +221,7 @@ class DriverAppController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Order marked as delivered successfully',
-            'data' => [
-                'order' => $order,
-            ],
+            'data' => ['order' => $order],
         ]);
     }
 }

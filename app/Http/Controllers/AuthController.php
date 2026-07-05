@@ -14,7 +14,7 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        if (!Auth::attempt($validated)) {
+        if (! Auth::attempt($validated)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Invalid email or password',
@@ -32,12 +32,12 @@ class AuthController extends Controller
             ], 403);
         }
 
-        $user->load('driver.company');
+        $user->load('driver.car.company');
 
-        if (!$user->driver) {
+        if (! $user->driver || ! $user->driver->car) {
             return response()->json([
                 'status' => false,
-                'message' => 'Driver profile not found',
+                'message' => 'Driver profile or assigned car not found',
             ], 404);
         }
 
@@ -54,16 +54,19 @@ class AuthController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
-                    'address' => $user->address,
-                    'company_id' => $user->driver->company_id,
-                    'company_name' => $user->driver->company?->name_company,
-                    'vehicle_type' => $user->driver->vehicle_type,
-                    'plate_number' => $user->driver->plate_number,
-                    'is_active' => $user->driver->is_active,
+                    'latitude' => $user->latitude,
+                    'longitude' => $user->longitude,
+                    'company_id' => $user->driver->car->company_id,
+                    'company_name' => $user->driver->car->company?->name_company,
+                    'company_car_id' => $user->driver->company_car_id,
+                    'vehicle_type' => $user->driver->car->vehicle_type,
+                    'plate_number' => $user->driver->car->plate_number,
+                    'status' => $user->driver->status,
                 ],
             ],
         ]);
     }
+
     public function login(Request $request)
     {
         $validated = $request->validate([
@@ -71,7 +74,7 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (!Auth::attempt($validated)) {
+        if (! Auth::attempt($validated)) {
             return response()->json([
                 'status' => false,
                 'message' => 'Invalid email or password',
@@ -96,12 +99,17 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->currentAccessToken()) {
+        if (! $user || ! $user->currentAccessToken()) {
             return response()->json([
                 'status' => false,
                 'message' => 'Unauthenticated',
                 'data' => null,
             ], 401);
+        }
+
+        if ($user->user_type === 'driver') {
+            $user->loadMissing('driver');
+            $user->driver?->update(['fcm_token' => null]);
         }
 
         $user->currentAccessToken()->delete();

@@ -41,7 +41,7 @@ Route::post('/driver/login', [AuthController::class, 'logindriver']);
 /**
  * إرسال إشعار تجريبي بواسطة Firebase Cloud Messaging.
  */
-Route::post('/push-notification', [TestPushController::class, 'send']);
+Route::post('/test-push', [TestPushController::class, 'send']);
 
 
 /*

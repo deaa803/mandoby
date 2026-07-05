@@ -7,15 +7,13 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class DriverController extends Controller
 {
-    /**
-     * Display a listing of drivers.
-     */
     public function index()
     {
-        $drivers = Driver::with(['user', 'company', 'car'])
+        $drivers = Driver::with(['user', 'car.company'])
             ->latest()
             ->get();
 
@@ -23,26 +21,23 @@ class DriverController extends Controller
             'status' => true,
             'message' => 'Drivers retrieved successfully',
             'data' => $drivers,
-        ], 200);
+        ]);
     }
 
-    /**
-     * Store a newly created driver.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            // user fields
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-
-            // driver fields
-            'company_id' => ['required', 'exists:companies,id'],
-            'company_car_id' => ['nullable', 'exists:company_cars,id'],
+            'company_car_id' => [
+                'required',
+                'exists:company_cars,id',
+                Rule::unique('drivers', 'company_car_id'),
+            ],
             'status' => ['nullable', 'in:available,busy,offline'],
         ]);
 
@@ -60,16 +55,13 @@ class DriverController extends Controller
 
                 $driver = Driver::create([
                     'user_id' => $user->id,
-                    'company_id' => $validated['company_id'],
-                    'company_car_id' => $validated['company_car_id'] ?? null,
+                    'company_car_id' => $validated['company_car_id'],
                     'status' => $validated['status'] ?? 'available',
                 ]);
 
-                $token = $user->createToken($user->name)->plainTextToken;
-
                 return [
-                    'driver' => $driver->load(['user', 'company', 'car']),
-                    'token' => $token,
+                    'driver' => $driver->load(['user', 'car.company']),
+                    'token' => $user->createToken($user->name)->plainTextToken,
                 ];
             });
 
@@ -79,7 +71,6 @@ class DriverController extends Controller
                 'data' => $result['driver'],
                 'token' => $result['token'],
             ], 201);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -89,35 +80,35 @@ class DriverController extends Controller
         }
     }
 
-    /**
-     * Display the specified driver.
-     */
     public function show(Driver $driver)
     {
         return response()->json([
             'status' => true,
             'message' => 'Driver retrieved successfully',
-            'data' => $driver->load(['user', 'company', 'car', 'orders']),
-        ], 200);
+            'data' => $driver->load(['user', 'car.company', 'orders']),
+        ]);
     }
 
-    /**
-     * Update the specified driver.
-     */
     public function update(Request $request, Driver $driver)
     {
         $validated = $request->validate([
-            // user fields
             'name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $driver->user_id],
+            'email' => [
+                'sometimes',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($driver->user_id),
+            ],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
-
-            // driver fields
-            'company_id' => ['sometimes', 'exists:companies,id'],
-            'company_car_id' => ['sometimes', 'nullable', 'exists:company_cars,id'],
+            'company_car_id' => [
+                'sometimes',
+                'required',
+                'exists:company_cars,id',
+                Rule::unique('drivers', 'company_car_id')->ignore($driver->id),
+            ],
             'status' => ['sometimes', 'in:available,busy,offline'],
         ]);
 
@@ -127,31 +118,30 @@ class DriverController extends Controller
                     ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
                     ->toArray();
 
-                if (!empty($validated['password'])) {
+                if (! empty($validated['password'])) {
                     $userData['password'] = Hash::make($validated['password']);
                 }
 
-                if (!empty($userData)) {
+                if ($userData !== []) {
                     $driver->user->update($userData);
                 }
 
                 $driverData = collect($validated)
-                    ->only(['company_id', 'company_car_id', 'status'])
+                    ->only(['company_car_id', 'status'])
                     ->toArray();
 
-                if (!empty($driverData)) {
+                if ($driverData !== []) {
                     $driver->update($driverData);
                 }
 
-                return $driver->fresh()->load(['user', 'company', 'car']);
+                return $driver->fresh()->load(['user', 'car.company']);
             });
 
             return response()->json([
                 'status' => true,
                 'message' => 'Driver updated successfully',
                 'data' => $updatedDriver,
-            ], 200);
-
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -161,21 +151,21 @@ class DriverController extends Controller
         }
     }
 
-    /**
-     * Remove the specified driver.
-     */
     public function destroy(Driver $driver)
     {
         try {
             DB::transaction(function () use ($driver) {
-                $driver->user->delete();
+                if ($driver->user) {
+                    $driver->user->delete();
+                } else {
+                    $driver->delete();
+                }
             });
 
             return response()->json([
                 'status' => true,
                 'message' => 'Driver deleted successfully',
-            ], 200);
-
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -185,9 +175,6 @@ class DriverController extends Controller
         }
     }
 
-    /**
-     * Update current driver's location.
-     */
     public function updateLocation(Request $request)
     {
         $validated = $request->validate([
@@ -195,7 +182,7 @@ class DriverController extends Controller
             'current_lng' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
-        $user = $request->user();
+        $user = $request->user()->loadMissing('driver');
 
         if ($user->user_type !== 'driver' || ! $user->driver) {
             return response()->json([
@@ -213,9 +200,7 @@ class DriverController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Driver location updated successfully',
-            'data' => $user->driver->fresh()->load(['user', 'company', 'car']),
-        ], 200);
+            'data' => $user->driver->fresh()->load(['user', 'car.company']),
+        ]);
     }
-
-
 }

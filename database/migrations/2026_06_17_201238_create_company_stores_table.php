@@ -17,8 +17,7 @@ return new class extends Migration
                 ->constrained('stores')
                 ->cascadeOnDelete();
 
-            $table->integer('return_days')->default(0);
-
+            $table->unsignedInteger('return_days')->default(0);
             $table->timestamps();
 
             $table->primary(['company_id', 'store_id']);

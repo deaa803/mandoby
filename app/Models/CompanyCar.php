@@ -12,9 +12,20 @@ class CompanyCar extends Model
     protected $fillable = [
         'company_id',
         'vehicle_type',
-        'driver_name',
         'plate_number',
     ];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (CompanyCar $car): void {
+            // احذف حساب السائق أولاً حتى لا يمنع المفتاح الأجنبي حذف السيارة.
+            $driverUser = $car->driver?->user;
+
+            if ($driverUser) {
+                $driverUser->delete();
+            }
+        });
+    }
 
     public function company()
     {
@@ -24,10 +35,5 @@ class CompanyCar extends Model
     public function driver()
     {
         return $this->hasOne(Driver::class, 'company_car_id');
-    }
-
-    public function drivers()
-    {
-        return $this->hasMany(Driver::class, 'company_car_id');
     }
 }

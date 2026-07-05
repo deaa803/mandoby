@@ -15,6 +15,11 @@ return new class extends Migration
                 ->constrained('stores')
                 ->cascadeOnDelete();
 
+            $table->foreignId('driver_id')
+                ->nullable()
+                ->constrained('drivers')
+                ->nullOnDelete();
+
             $table->decimal('total_price', 15, 2)->default(0);
             $table->date('date');
             $table->decimal('commission', 15, 2)->default(0);
@@ -31,6 +36,9 @@ return new class extends Migration
             $table->decimal('remaining_amount', 15, 2)->default(0);
 
             $table->timestamps();
+
+            $table->index(['store_id', 'status']);
+            $table->index(['driver_id', 'status']);
         });
     }
 

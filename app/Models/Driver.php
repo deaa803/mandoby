@@ -8,7 +8,6 @@ class Driver extends Model
 {
     protected $fillable = [
         'user_id',
-        'company_id',
         'company_car_id',
         'status',
         'current_lat',
@@ -17,23 +16,24 @@ class Driver extends Model
         'fcm_token',
     ];
 
+    protected $casts = [
+        'last_location_at' => 'datetime',
+        'current_lat' => 'decimal:7',
+        'current_lng' => 'decimal:7',
+    ];
+
     public function user()
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function company()
-    {
-        return $this->belongsTo(Company::class);
     }
 
     public function car()
     {
         return $this->belongsTo(CompanyCar::class, 'company_car_id');
     }
+
     public function orders()
     {
         return $this->hasMany(Order::class);
     }
-
 }

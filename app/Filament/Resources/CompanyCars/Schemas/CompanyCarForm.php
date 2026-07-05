@@ -26,9 +26,11 @@ class CompanyCarForm
 
                 TextInput::make('plate_number')
                     ->required()
+                    ->unique(ignoreRecord: true)
                     ->maxLength(255)
                     ->label('رقم اللوحة'),
 
+                // هذا حقل واجهة فقط، واسم السائق يُحفظ داخل users.name.
                 TextInput::make('driver_name')
                     ->required()
                     ->maxLength(255)

@@ -12,12 +12,15 @@ return new class extends Migration
             $table->id();
 
             $table->foreignId('user_id')
+                ->unique()
                 ->constrained('users')
                 ->cascadeOnDelete();
 
             $table->string('name_company');
             $table->text('description')->nullable();
             $table->string('logo')->nullable();
+            $table->boolean('has_3d_access')->default(false);
+            $table->timestamp('model_3d_expires_at')->nullable();
 
             $table->timestamps();
         });

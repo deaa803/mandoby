@@ -34,6 +34,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('progress')->default(0);
             $table->text('error_message')->nullable();
             $table->json('metadata')->nullable();
+            $table->timestamp('started_at')->nullable();
             $table->timestamp('generated_at')->nullable();
             $table->timestamps();
 

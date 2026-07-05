@@ -14,7 +14,7 @@ class CompanyCarInfolist
                 TextEntry::make('company.name_company')->label('الشركة'),
                 TextEntry::make('vehicle_type')->label('نوع السيارة'),
                 TextEntry::make('plate_number')->label('رقم اللوحة'),
-                TextEntry::make('driver_name')->label('اسم السائق'),
+                TextEntry::make('driver.user.name')->label('اسم السائق')->placeholder('-'),
                 TextEntry::make('driver.user.email')->label('بريد السائق')->placeholder('-'),
                 TextEntry::make('driver.user.phone')->label('هاتف السائق')->placeholder('-'),
                 TextEntry::make('driver.status')->badge()->label('حالة السائق')->placeholder('-'),

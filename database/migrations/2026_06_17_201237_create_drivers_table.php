@@ -22,10 +22,9 @@ return new class extends Migration
              * drivers.company_car_id -> company_cars.company_id
              */
             $table->foreignId('company_car_id')
-                ->nullable()
                 ->unique()
                 ->constrained('company_cars')
-                ->nullOnDelete();
+                ->restrictOnDelete();
 
             $table->string('fcm_token', 512)
                 ->nullable()

@@ -37,6 +37,7 @@ class DriverAppController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
+                    'address' => $user->address,
                     'latitude' => $user->latitude,
                     'longitude' => $user->longitude,
                     'company_id' => $user->driver->car->company_id,
@@ -208,7 +209,10 @@ class DriverAppController extends Controller
             ]);
         }
 
-        $order->update(['status' => 'delivered']);
+        DB::transaction(function () use ($order, $user) {
+            $order->update(['status' => 'delivered']);
+            $user->driver->update(['status' => 'available']);
+        });
 
         $order->load([
             'store.user',

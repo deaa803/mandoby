@@ -17,6 +17,7 @@ return new class extends Migration
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->string('phone')->nullable();
+            $table->string('address');
             $table->enum('user_type', ['store', 'company', 'driver', 'admin']);
             $table->rememberToken();
             $table->timestamps();

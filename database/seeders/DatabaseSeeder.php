@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             'latitude' => 33.5138050,
             'longitude' => 36.2765270,
             'phone' => '0990000000',
+            'address' => 'دمشق - مركز الإدارة',
             'user_type' => 'admin',
             'remember_token' => null,
             'created_at' => $now,
@@ -52,6 +53,7 @@ class DatabaseSeeder extends Seeder
                 'latitude' => fake()->randomFloat(7, 33.4000000, 36.4000000),
                 'longitude' => fake()->randomFloat(7, 35.5000000, 38.5000000),
                 'phone' => '09' . rand(30000000, 99999999),
+                'address' => "دمشق - عنوان المتجر {$i}",
                 'user_type' => 'store',
                 'remember_token' => null,
                 'created_at' => $now,
@@ -90,6 +92,7 @@ class DatabaseSeeder extends Seeder
                 'latitude' => fake()->randomFloat(7, 33.4000000, 36.4000000),
                 'longitude' => fake()->randomFloat(7, 35.5000000, 38.5000000),
                 'phone' => '09' . rand(30000000, 99999999),
+                'address' => "دمشق - عنوان الشركة {$i}",
                 'user_type' => 'company',
                 'remember_token' => null,
                 'created_at' => $now,
@@ -169,6 +172,7 @@ class DatabaseSeeder extends Seeder
                 'latitude' => fake()->randomFloat(7, 33.4000000, 36.4000000),
                 'longitude' => fake()->randomFloat(7, 35.5000000, 38.5000000),
                 'phone' => '09' . rand(30000000, 99999999),
+                'address' => "دمشق - عنوان السائق {$i}",
                 'user_type' => 'driver',
                 'remember_token' => null,
                 'created_at' => $now,
@@ -452,7 +456,13 @@ class DatabaseSeeder extends Seeder
             foreach ($selectedProductDetails as $productDetailId) {
                 $price = rand(5000, 100000);
                 $quantity = rand(1, 10);
-                $discount = rand(0, 5000);
+                $discountPercent = match (true) {
+                    $quantity >= 50 => 7,
+                    $quantity >= 25 => 5,
+                    $quantity >= 10 => 2,
+                    default => 0,
+                };
+                $discount = round(($price * $quantity) * ($discountPercent / 100), 2);
 
                 $lineTotal = max(0, ($price * $quantity) - $discount);
                 $totalPrice += $lineTotal;

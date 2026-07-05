@@ -17,8 +17,16 @@ class CompanyCarController extends Controller
     {
         $company = $request->user()?->company;
 
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
         $cars = CompanyCar::with(['company', 'driver.user'])
-            ->when($company, fn ($query) => $query->where('company_id', $company->id))
+            ->where('company_id', $company->id)
             ->latest()
             ->get();
 
@@ -33,7 +41,7 @@ class CompanyCarController extends Controller
     {
         $company = $request->user()?->company;
 
-        if (! $company && ! $request->filled('company_id')) {
+        if (!$company) {
             return response()->json([
                 'status' => false,
                 'message' => 'Company account not found',
@@ -42,21 +50,28 @@ class CompanyCarController extends Controller
         }
 
         $validated = $request->validate([
-            'company_id' => ['nullable', 'exists:companies,id'],
             'vehicle_type' => ['required', 'string', 'max:255'],
-            'plate_number' => ['required', 'string', 'max:255', 'unique:company_cars,plate_number'],
+            'plate_number' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:company_cars,plate_number',
+            ],
             'driver_name' => ['required', 'string', 'max:255'],
-            'driver_email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'driver_email' => [
+                'required',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ],
             'driver_password' => ['required', 'string', 'min:8'],
             'driver_phone' => ['nullable', 'string', 'max:30'],
         ]);
 
-        $companyId = $company?->id ?? $validated['company_id'];
-
         try {
-            $result = DB::transaction(function () use ($validated, $companyId) {
+            $result = DB::transaction(function () use ($validated, $company) {
                 $car = CompanyCar::create([
-                    'company_id' => $companyId,
+                    'company_id' => $company->id,
                     'vehicle_type' => $validated['vehicle_type'],
                     'plate_number' => $validated['plate_number'],
                 ]);
@@ -66,6 +81,9 @@ class CompanyCarController extends Controller
                     'email' => $validated['driver_email'],
                     'password' => Hash::make($validated['driver_password']),
                     'phone' => $validated['driver_phone'] ?? null,
+                    'address' => $company->user?->address ?? 'غير محدد',
+                    'latitude' => $company->user?->latitude,
+                    'longitude' => $company->user?->longitude,
                     'user_type' => 'driver',
                 ]);
 
@@ -95,8 +113,16 @@ class CompanyCarController extends Controller
         }
     }
 
-    public function show(CompanyCar $companyCar)
+    public function show(Request $request, CompanyCar $companyCar)
     {
+        if (!$this->ownsCar($request, $companyCar)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to access this car',
+                'data' => null,
+            ], 403);
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Company car retrieved successfully',
@@ -106,8 +132,15 @@ class CompanyCarController extends Controller
 
     public function update(Request $request, CompanyCar $companyCar)
     {
+        if (!$this->ownsCar($request, $companyCar)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to update this car',
+                'data' => null,
+            ], 403);
+        }
+
         $validated = $request->validate([
-            'company_id' => ['sometimes', 'required', 'exists:companies,id'],
             'vehicle_type' => ['sometimes', 'required', 'string', 'max:255'],
             'plate_number' => [
                 'sometimes',
@@ -117,21 +150,30 @@ class CompanyCarController extends Controller
                 Rule::unique('company_cars', 'plate_number')->ignore($companyCar->id),
             ],
             'driver_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'driver_phone' => ['sometimes', 'nullable', 'string', 'max:30'],
         ]);
 
         DB::transaction(function () use ($validated, $companyCar) {
             $carData = collect($validated)
-                ->only(['company_id', 'vehicle_type', 'plate_number'])
+                ->only(['vehicle_type', 'plate_number'])
                 ->toArray();
 
             if ($carData !== []) {
                 $companyCar->update($carData);
             }
 
-            if (isset($validated['driver_name']) && $companyCar->driver?->user) {
-                $companyCar->driver->user->update([
-                    'name' => $validated['driver_name'],
-                ]);
+            $userData = [];
+
+            if (array_key_exists('driver_name', $validated)) {
+                $userData['name'] = $validated['driver_name'];
+            }
+
+            if (array_key_exists('driver_phone', $validated)) {
+                $userData['phone'] = $validated['driver_phone'];
+            }
+
+            if ($userData !== [] && $companyCar->driver?->user) {
+                $companyCar->driver->user->update($userData);
             }
         });
 
@@ -142,16 +184,23 @@ class CompanyCarController extends Controller
         ]);
     }
 
-    public function destroy(CompanyCar $companyCar)
+    public function destroy(Request $request, CompanyCar $companyCar)
     {
+        if (!$this->ownsCar($request, $companyCar)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to delete this car',
+                'data' => null,
+            ], 403);
+        }
+
         try {
-            DB::transaction(function () use ($companyCar) {
-                $companyCar->delete();
-            });
+            $companyCar->delete();
 
             return response()->json([
                 'status' => true,
                 'message' => 'Company car and linked driver account deleted successfully',
+                'data' => null,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -166,7 +215,7 @@ class CompanyCarController extends Controller
     {
         $company = Company::find($companyId);
 
-        if (! $company) {
+        if (!$company) {
             return response()->json([
                 'status' => false,
                 'message' => 'Company not found',
@@ -174,15 +223,20 @@ class CompanyCarController extends Controller
             ], 404);
         }
 
-        $cars = CompanyCar::with('driver.user')
-            ->where('company_id', $companyId)
-            ->latest()
-            ->get();
-
         return response()->json([
             'status' => true,
             'message' => 'Company cars retrieved successfully',
-            'data' => $cars,
+            'data' => CompanyCar::with('driver.user')
+                ->where('company_id', $companyId)
+                ->latest()
+                ->get(),
         ]);
+    }
+
+    private function ownsCar(Request $request, CompanyCar $companyCar): bool
+    {
+        $company = $request->user()?->company;
+
+        return $company && (int) $companyCar->company_id === (int) $company->id;
     }
 }

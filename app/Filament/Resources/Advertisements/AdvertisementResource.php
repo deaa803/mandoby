@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Advertisements;
 
 use App\Filament\Resources\Advertisements\Pages\CreateAdvertisement;
-use App\Filament\Resources\Advertisements\Pages\EditAdvertisement;
 use App\Filament\Resources\Advertisements\Pages\ListAdvertisements;
 use App\Filament\Resources\Advertisements\Pages\ViewAdvertisement;
 use App\Filament\Resources\Advertisements\Schemas\AdvertisementForm;
@@ -53,7 +52,6 @@ class AdvertisementResource extends Resource
             'index' => ListAdvertisements::route('/'),
             'create' => CreateAdvertisement::route('/create'),
             'view' => ViewAdvertisement::route('/{record}'),
-            'edit' => EditAdvertisement::route('/{record}/edit'),
         ];
     }
 }

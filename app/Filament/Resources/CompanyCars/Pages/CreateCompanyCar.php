@@ -29,13 +29,17 @@ class CreateCompanyCar extends CreateRecord
                 $data['driver_phone']
             );
 
-            $car = CompanyCar::create($data);
+            $car = CompanyCar::create($data)->load('company.user');
+            $companyUser = $car->company?->user;
 
             $user = User::create([
                 'name' => $driverName,
                 'email' => $driverEmail,
                 'password' => $driverPassword,
                 'phone' => $driverPhone,
+                'address' => $companyUser?->address ?? 'عنوان غير محدد',
+                'latitude' => $companyUser?->latitude,
+                'longitude' => $companyUser?->longitude,
                 'user_type' => 'driver',
             ]);
 

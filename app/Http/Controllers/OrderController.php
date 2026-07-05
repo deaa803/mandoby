@@ -4,15 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Driver;
 use App\Models\Order;
+use App\Models\ProductDetail;
 use App\Services\FcmService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
     private array $relations = [
         'store.user',
+        'driver.user',
+        'driver.car.company',
         'productDetails.product',
         'productDetails.company',
         'productDetails.category',
@@ -20,85 +24,53 @@ class OrderController extends Controller
         'payments',
     ];
 
-    /**
-     * Display a listing of orders.
-     */
     public function index()
     {
-        $orders = Order::with($this->relations)
-            ->latest()
-            ->get();
-
         return response()->json([
             'status' => true,
             'message' => 'Orders retrieved successfully',
-            'data' => $orders,
+            'data' => Order::with($this->relations)->latest()->get(),
         ]);
     }
 
     /**
-     * Store a newly created order.
+     * Create one order. All submitted products must belong to one company.
+     * Flutter normally uses storeBatch() so a multi-company cart is split
+     * into one order per company inside one database transaction.
      */
     public function store(Request $request)
     {
-        $store = $request->user()->store;
+        $store = $request->user()?->store;
 
         if (!$store) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store account not found',
-                'data' => null,
-            ], 404);
+            return $this->notFound('Store account not found');
         }
 
         $validated = $request->validate([
-            'date' => ['nullable', 'date'],
-            'commission' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['nullable', 'string', 'max:255'],
-            'paid_amount' => ['nullable', 'numeric', 'min:0'],
-
             'products' => ['required', 'array', 'min:1'],
-            'products.*.product_detail_id' => ['required', 'exists:product_details,id'],
-            'products.*.price' => ['required', 'numeric', 'min:0'],
+            'products.*.product_detail_id' => [
+                'required',
+                'integer',
+                'distinct',
+                'exists:product_details,id',
+            ],
             'products.*.quantity' => ['required', 'integer', 'min:1'],
-            'products.*.discount' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         try {
             $order = DB::transaction(function () use ($validated, $store) {
-                $totalPrice = 0;
+                $prepared = $this->prepareProducts($validated['products']);
 
-                foreach ($validated['products'] as $product) {
-                    $price = $product['price'];
-                    $quantity = $product['quantity'];
-                    $discount = $product['discount'] ?? 0;
-
-                    $totalPrice += ($price * $quantity) - $discount;
-                }
-
-                $commission = $validated['commission'] ?? 0;
-                $paidAmount = $validated['paid_amount'] ?? 0;
-                $remainingAmount = $totalPrice - $paidAmount;
-
-                $order = Order::create([
-                    'store_id' => $store->id,
-                    'total_price' => $totalPrice,
-                    'date' => $validated['date'] ?? now()->toDateString(),
-                    'commission' => $commission,
-                    'status' => $validated['status'] ?? 'pending',
-                    'paid_amount' => $paidAmount,
-                    'remaining_amount' => $remainingAmount,
-                ]);
-
-                foreach ($validated['products'] as $product) {
-                    $order->productDetails()->attach($product['product_detail_id'], [
-                        'price' => $product['price'],
-                        'quantity' => $product['quantity'],
-                        'discount' => $product['discount'] ?? 0,
+                if ($prepared['company_ids']->count() !== 1) {
+                    throw ValidationException::withMessages([
+                        'products' => 'All products in one order must belong to the same company.',
                     ]);
                 }
 
-                return $order;
+                return $this->createOrder(
+                    storeId: $store->id,
+                    lines: $prepared['lines'],
+                );
             });
 
             return response()->json([
@@ -106,19 +78,68 @@ class OrderController extends Controller
                 'message' => 'Order created successfully',
                 'data' => $order->load($this->relations),
             ], 201);
-
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to create order',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError('Failed to create order', $e);
         }
     }
 
     /**
-     * Display the specified order.
+     * Create a separate order for every company represented in the cart.
+     * The whole operation succeeds or fails together.
      */
+    public function storeBatch(Request $request)
+    {
+        $store = $request->user()?->store;
+
+        if (!$store) {
+            return $this->notFound('Store account not found');
+        }
+
+        $validated = $request->validate([
+            'products' => ['required', 'array', 'min:1'],
+            'products.*.product_detail_id' => [
+                'required',
+                'integer',
+                'distinct',
+                'exists:product_details,id',
+            ],
+            'products.*.quantity' => ['required', 'integer', 'min:1'],
+        ]);
+
+        try {
+            $orders = DB::transaction(function () use ($validated, $store) {
+                $prepared = $this->prepareProducts($validated['products']);
+
+                return $prepared['lines']
+                    ->groupBy('company_id')
+                    ->map(function (Collection $companyLines) use ($store) {
+                        return $this->createOrder(
+                            storeId: $store->id,
+                            lines: $companyLines,
+                        );
+                    })
+                    ->values();
+            });
+
+            $orders->each->load($this->relations);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Orders created successfully',
+                'data' => [
+                    'orders_count' => $orders->count(),
+                    'orders' => $orders,
+                ],
+            ], 201);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to create orders', $e);
+        }
+    }
+
     public function show(Order $order)
     {
         return response()->json([
@@ -129,67 +150,68 @@ class OrderController extends Controller
     }
 
     /**
-     * Update the specified order.
+     * Administrative update. Product prices and discounts are always
+     * recalculated from Laravel and never trusted from the request.
      */
     public function update(Request $request, Order $order)
     {
         $validated = $request->validate([
-            'store_id' => ['sometimes', 'required', 'exists:stores,id'],
-            'date' => ['sometimes', 'required', 'date'],
-            'commission' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['nullable', 'string', 'max:255'],
-            'paid_amount' => ['nullable', 'numeric', 'min:0'],
-
-            'products' => ['nullable', 'array', 'min:1'],
-            'products.*.product_detail_id' => ['required_with:products', 'exists:product_details,id'],
-            'products.*.price' => ['required_with:products', 'numeric', 'min:0'],
-            'products.*.quantity' => ['required_with:products', 'integer', 'min:1'],
-            'products.*.discount' => ['nullable', 'numeric', 'min:0'],
+            'date' => ['sometimes', 'date'],
+            'commission' => ['sometimes', 'numeric', 'min:0'],
+            'status' => [
+                'sometimes',
+                'in:pending,preparing,delivering,delivered,cancelled',
+            ],
+            'driver_id' => ['sometimes', 'nullable', 'exists:drivers,id'],
+            'products' => ['sometimes', 'array', 'min:1'],
+            'products.*.product_detail_id' => [
+                'required_with:products',
+                'integer',
+                'distinct',
+                'exists:product_details,id',
+            ],
+            'products.*.quantity' => [
+                'required_with:products',
+                'integer',
+                'min:1',
+            ],
         ]);
 
         try {
-            $updatedOrder = DB::transaction(function () use ($validated, $order) {
+            $updated = DB::transaction(function () use ($validated, $order) {
                 $orderData = collect($validated)
-                    ->only(['store_id', 'date', 'commission', 'status', 'paid_amount'])
+                    ->only(['date', 'commission', 'status', 'driver_id'])
                     ->toArray();
 
-                if (array_key_exists('commission', $orderData)) {
-                    $orderData['commission'] = $orderData['commission'] ?? 0;
-                }
-
-                if (array_key_exists('paid_amount', $orderData)) {
-                    $orderData['paid_amount'] = $orderData['paid_amount'] ?? 0;
-                }
-
                 if (array_key_exists('products', $validated)) {
-                    $totalPrice = 0;
-                    $syncData = [];
+                    $prepared = $this->prepareProducts($validated['products']);
 
-                    foreach ($validated['products'] as $product) {
-                        $price = $product['price'];
-                        $quantity = $product['quantity'];
-                        $discount = $product['discount'] ?? 0;
+                    if ($prepared['company_ids']->count() !== 1) {
+                        throw ValidationException::withMessages([
+                            'products' => 'All products in one order must belong to the same company.',
+                        ]);
+                    }
 
-                        $totalPrice += ($price * $quantity) - $discount;
+                    $total = $prepared['lines']->sum('line_total');
+                    $orderData['total_price'] = $total;
+                    $orderData['remaining_amount'] = max(
+                        $total - (float) $order->paid_amount,
+                        0,
+                    );
 
-                        $syncData[$product['product_detail_id']] = [
-                            'price' => $price,
-                            'quantity' => $quantity,
-                            'discount' => $discount,
+                    $sync = [];
+                    foreach ($prepared['lines'] as $line) {
+                        $sync[$line['product_detail_id']] = [
+                            'price' => $line['price'],
+                            'quantity' => $line['quantity'],
+                            'discount' => $line['discount_amount'],
                         ];
                     }
 
-                    $orderData['total_price'] = $totalPrice;
-
-                    $paidAmount = $orderData['paid_amount'] ?? $order->paid_amount;
-                    $orderData['remaining_amount'] = $totalPrice - $paidAmount;
-
-                    $order->productDetails()->sync($syncData);
-                } elseif (array_key_exists('paid_amount', $orderData)) {
-                    $orderData['remaining_amount'] = $order->total_price - $orderData['paid_amount'];
+                    $order->productDetails()->sync($sync);
                 }
 
-                if (!empty($orderData)) {
+                if ($orderData !== []) {
                     $order->update($orderData);
                 }
 
@@ -199,212 +221,45 @@ class OrderController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Order updated successfully',
-                'data' => $updatedOrder,
+                'data' => $updated,
             ]);
-
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to update order',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError('Failed to update order', $e);
         }
     }
 
-    /**
-     * Remove the specified order.
-     */
     public function destroy(Order $order)
     {
         try {
-            DB::transaction(function () use ($order) {
-                $order->productDetails()->detach();
-                $order->delete();
-            });
+            $order->delete();
 
             return response()->json([
                 'status' => true,
                 'message' => 'Order deleted successfully',
                 'data' => null,
             ]);
-
         } catch (\Throwable $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Failed to delete order',
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError('Failed to delete order', $e);
         }
     }
+
     public function myOrders(Request $request)
     {
-        $store = $request->user()->store;
+        $store = $request->user()?->store;
 
         if (!$store) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store account not found',
-                'data' => null,
-            ], 404);
+            return $this->notFound('Store account not found');
         }
-
-        $orders = Order::with($this->relations)
-            ->where('store_id', $store->id)
-            ->latest()
-            ->get();
 
         return response()->json([
             'status' => true,
             'message' => 'My orders retrieved successfully',
-            'data' => $orders,
-        ]);
-    }
-
-    public function myDebts(Request $request)
-    {
-        $store = $request->user()->store;
-
-        if (!$store) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store account not found',
-                'data' => null,
-            ], 404);
-        }
-
-        $orders = Order::with($this->relations)
-            ->where('store_id', $store->id)
-            ->where('remaining_amount', '>', 0)
-            ->latest()
-            ->get();
-
-        $totalDebt = $orders->sum('remaining_amount');
-
-        return response()->json([
-            'status' => true,
-            'message' => 'My debts retrieved successfully',
-            'data' => [
-                'total_debt' => $totalDebt,
-                'orders' => $orders,
-            ],
-        ]);
-    }
-
-    public function companyOrders(Request $request)
-    {
-        $company = $request->user()->company;
-
-        if (!$company) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Company account not found',
-                'data' => null,
-            ], 404);
-        }
-
-        $orders = Order::with($this->relations)
-            ->whereHas('productDetails', function ($query) use ($company) {
-                $query->where('company_id', $company->id);
-            })
-            ->latest()
-            ->get();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Company orders retrieved successfully',
-            'data' => $orders,
-        ]);
-    }
-    public function assignDriver(Request $request, Order $order, FcmService $fcmService)
-    {
-        $user = $request->user()->load('company');
-
-        if ($user->user_type !== 'company') {
-            return response()->json([
-                'status' => false,
-                'message' => 'This account is not a company account',
-            ], 403);
-        }
-
-        if (!$user->company) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Company profile not found',
-            ], 404);
-        }
-
-        $validated = $request->validate([
-            'driver_id' => ['required', 'exists:drivers,id'],
-        ]);
-
-        $driver = Driver::where('id', $validated['driver_id'])
-            ->whereHas('car', function ($query) use ($user) {
-                $query->where('company_id', $user->company->id);
-            })
-            ->first();
-
-        if (!$driver) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Driver not found in your company',
-            ], 404);
-        }
-
-        $belongsToCompany = $order->productDetails()
-            ->where('company_id', $user->company->id)
-            ->exists();
-
-        if (!$belongsToCompany) {
-            return response()->json([
-                'status' => false,
-                'message' => 'This order does not belong to your company',
-            ], 403);
-        }
-
-        $order->update([
-            'driver_id' => $driver->id,
-            'status' => 'delivering',
-        ]);
-
-        $order->load([
-            'store.user',
-            'driver.user',
-            'driver.car.company',
-            'productDetails.product',
-            'productDetails.category',
-            'productDetails.images',
-        ]);
-
-        if ($driver->fcm_token) {
-            try {
-                $fcmService->sendToToken(
-                    token: $driver->fcm_token,
-                    title: 'طلب جديد',
-                    body: 'لديك طلب توصيل جديد',
-                    data: [
-                        'type' => 'new_order',
-                        'order_id' => $order->id,
-                        'driver_id' => $driver->id,
-                    ],
-                );
-            } catch (\Throwable $e) {
-                return response()->json([
-                    'status' => true,
-                    'message' => 'Order assigned to driver, but push notification failed',
-                    'data' => [
-                        'order' => $order,
-                        'push_error' => $e->getMessage(),
-                    ],
-                ]);
-            }
-        }
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Order assigned to driver successfully',
-            'data' => [
-                'order' => $order,
-            ],
+            'data' => Order::with($this->relations)
+                ->where('store_id', $store->id)
+                ->latest()
+                ->get(),
         ]);
     }
 
@@ -418,35 +273,319 @@ class OrderController extends Controller
         return $this->myOrdersByCompletion($request, true);
     }
 
-    private function myOrdersByCompletion(Request $request, bool $completed)
+    public function myDebts(Request $request)
     {
-        $store = $request->user()->store;
+        $store = $request->user()?->store;
 
         if (!$store) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Store account not found',
-                'data' => null,
-            ], 404);
+            return $this->notFound('Store account not found');
         }
-
-        $completedStatuses = ['completed', 'delivered', 'تم التسليم', 'مكتمل'];
 
         $orders = Order::with($this->relations)
             ->where('store_id', $store->id)
-            ->when(
-                $completed,
-                fn ($query) => $query->whereIn('status', $completedStatuses),
-                fn ($query) => $query->whereNotIn('status', $completedStatuses)
-            )
+            ->where('remaining_amount', '>', 0)
             ->latest()
             ->get();
 
         return response()->json([
             'status' => true,
-            'message' => $completed ? 'Completed orders retrieved successfully' : 'Current orders retrieved successfully',
-            'data' => $orders,
+            'message' => 'My debts retrieved successfully',
+            'data' => [
+                'summary' => [
+                    'orders_count' => $orders->count(),
+                    'total_sales' => (float) $orders->sum('total_price'),
+                    'total_paid' => (float) $orders->sum('paid_amount'),
+                    'total_remaining' => (float) $orders->sum('remaining_amount'),
+                ],
+                'orders' => $orders,
+            ],
         ]);
     }
 
+    public function companyOrders(Request $request)
+    {
+        $company = $request->user()?->company;
+
+        if (!$company) {
+            return $this->notFound('Company account not found');
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company orders retrieved successfully',
+            'data' => $this->companyOrdersQuery($company->id)
+                ->latest()
+                ->get(),
+        ]);
+    }
+
+    public function companyReceivables(Request $request)
+    {
+        $company = $request->user()?->company;
+
+        if (!$company) {
+            return $this->notFound('Company account not found');
+        }
+
+        $allOrders = $this->companyOrdersQuery($company->id)
+            ->latest()
+            ->get();
+
+        $receivableOrders = $allOrders
+            ->where('remaining_amount', '>', 0)
+            ->values();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company receivables retrieved successfully',
+            'data' => [
+                'summary' => [
+                    'orders_count' => $allOrders->count(),
+                    'unpaid_orders_count' => $receivableOrders->count(),
+                    'total_sales' => (float) $allOrders->sum('total_price'),
+                    'total_paid' => (float) $allOrders->sum('paid_amount'),
+                    'total_remaining' => (float) $allOrders->sum('remaining_amount'),
+                ],
+                'orders' => $receivableOrders,
+            ],
+        ]);
+    }
+
+    public function assignDriver(
+        Request $request,
+        Order $order,
+        FcmService $fcmService,
+    ) {
+        $company = $request->user()?->company;
+
+        if (!$company) {
+            return $this->notFound('Company account not found');
+        }
+
+        $validated = $request->validate([
+            'driver_id' => ['required', 'integer', 'exists:drivers,id'],
+        ]);
+
+        if (!$this->orderBelongsToCompany($order, $company->id)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your company',
+                'data' => null,
+            ], 403);
+        }
+
+        $driver = Driver::with(['user', 'car.company'])
+            ->whereKey($validated['driver_id'])
+            ->whereHas('car', function ($query) use ($company) {
+                $query->where('company_id', $company->id);
+            })
+            ->first();
+
+        if (!$driver) {
+            return $this->notFound('Driver not found in your company');
+        }
+
+        if ($driver->status !== 'available' && (int) $order->driver_id !== $driver->id) {
+            throw ValidationException::withMessages([
+                'driver_id' => 'This driver is not available right now.',
+            ]);
+        }
+
+        DB::transaction(function () use ($order, $driver) {
+            if ($order->driver_id && (int) $order->driver_id !== $driver->id) {
+                Driver::whereKey($order->driver_id)->update(['status' => 'available']);
+            }
+
+            $order->update([
+                'driver_id' => $driver->id,
+                'status' => 'delivering',
+            ]);
+
+            $driver->update(['status' => 'busy']);
+        });
+
+        $order->load($this->relations);
+
+        $pushError = null;
+
+        if ($driver->fcm_token) {
+            try {
+                $fcmService->sendToToken(
+                    token: $driver->fcm_token,
+                    title: 'طلب توصيل جديد',
+                    body: 'تم إسناد طلب جديد إليك',
+                    data: [
+                        'type' => 'new_order',
+                        'order_id' => (string) $order->id,
+                        'driver_id' => (string) $driver->id,
+                    ],
+                );
+            } catch (\Throwable $e) {
+                $pushError = $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => $pushError
+                ? 'Order assigned, but push notification failed'
+                : 'Order assigned to driver successfully',
+            'data' => [
+                'order' => $order,
+                'push_error' => $pushError,
+            ],
+        ]);
+    }
+
+    private function myOrdersByCompletion(Request $request, bool $completed)
+    {
+        $store = $request->user()?->store;
+
+        if (!$store) {
+            return $this->notFound('Store account not found');
+        }
+
+        $query = Order::with($this->relations)
+            ->where('store_id', $store->id);
+
+        $completed
+            ? $query->where('status', 'delivered')
+            : $query->whereNotIn('status', ['delivered', 'cancelled']);
+
+        return response()->json([
+            'status' => true,
+            'message' => $completed
+                ? 'Completed orders retrieved successfully'
+                : 'Current orders retrieved successfully',
+            'data' => $query->latest()->get(),
+        ]);
+    }
+
+    private function prepareProducts(array $products): array
+    {
+        $requested = collect($products)->keyBy('product_detail_id');
+        $details = ProductDetail::query()
+            ->with(['product', 'company'])
+            ->whereIn('id', $requested->keys())
+            ->lockForShare()
+            ->get()
+            ->keyBy('id');
+
+        if ($details->count() !== $requested->count()) {
+            throw ValidationException::withMessages([
+                'products' => 'One or more products were not found.',
+            ]);
+        }
+
+        $lines = $requested->map(function (array $requestedLine, int|string $id) use ($details) {
+            /** @var ProductDetail $detail */
+            $detail = $details->get((int) $id);
+            $quantity = (int) $requestedLine['quantity'];
+
+            if ($detail->status !== 'available') {
+                throw ValidationException::withMessages([
+                    'products' => "Product detail #{$detail->id} is unavailable.",
+                ]);
+            }
+
+            if ($quantity < (int) $detail->min_order_quantity) {
+                throw ValidationException::withMessages([
+                    'products' => "Minimum quantity for product detail #{$detail->id} is {$detail->min_order_quantity}.",
+                ]);
+            }
+
+            $price = (float) $detail->price;
+            $gross = round($price * $quantity, 2);
+            $discountPercent = $this->discountPercentageFor($quantity);
+            $discountAmount = round($gross * ($discountPercent / 100), 2);
+
+            return [
+                'product_detail_id' => $detail->id,
+                'company_id' => $detail->company_id,
+                'price' => $price,
+                'quantity' => $quantity,
+                'discount_percent' => $discountPercent,
+                'discount_amount' => $discountAmount,
+                'line_total' => round($gross - $discountAmount, 2),
+            ];
+        })->values();
+
+        return [
+            'lines' => $lines,
+            'company_ids' => $lines->pluck('company_id')->unique()->values(),
+        ];
+    }
+
+    private function createOrder(int $storeId, Collection $lines): Order
+    {
+        $total = round((float) $lines->sum('line_total'), 2);
+
+        $order = Order::create([
+            'store_id' => $storeId,
+            'driver_id' => null,
+            'total_price' => $total,
+            'date' => now()->toDateString(),
+            'commission' => 0,
+            'status' => 'pending',
+            'paid_amount' => 0,
+            'remaining_amount' => $total,
+        ]);
+
+        $attach = [];
+
+        foreach ($lines as $line) {
+            $attach[$line['product_detail_id']] = [
+                'price' => $line['price'],
+                'quantity' => $line['quantity'],
+                'discount' => $line['discount_amount'],
+            ];
+        }
+
+        $order->productDetails()->attach($attach);
+
+        return $order;
+    }
+
+    private function discountPercentageFor(int $quantity): float
+    {
+        return match (true) {
+            $quantity >= 50 => 7,
+            $quantity >= 25 => 5,
+            $quantity >= 10 => 2,
+            default => 0,
+        };
+    }
+
+    private function companyOrdersQuery(int $companyId)
+    {
+        return Order::with($this->relations)
+            ->whereHas('productDetails', function ($query) use ($companyId) {
+                $query->where('product_details.company_id', $companyId);
+            });
+    }
+
+    private function orderBelongsToCompany(Order $order, int $companyId): bool
+    {
+        return $order->productDetails()
+            ->where('product_details.company_id', $companyId)
+            ->exists();
+    }
+
+    private function notFound(string $message)
+    {
+        return response()->json([
+            'status' => false,
+            'message' => $message,
+            'data' => null,
+        ], 404);
+    }
+
+    private function serverError(string $message, \Throwable $e)
+    {
+        return response()->json([
+            'status' => false,
+            'message' => $message,
+            'error' => $e->getMessage(),
+        ], 500);
+    }
 }

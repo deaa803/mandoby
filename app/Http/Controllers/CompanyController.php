@@ -11,35 +11,50 @@ use Illuminate\Support\Facades\Storage;
 
 class CompanyController extends Controller
 {
-    /**
-     * Display a listing of companies.
-     */
     public function index()
     {
-        $companies = Company::with('user')->latest()->get();
-
         return response()->json([
             'status' => true,
             'message' => 'Companies retrieved successfully',
-            'data' => $companies,
-        ], 200);
+            'data' => Company::with('user')->latest()->get(),
+        ]);
     }
 
+
     /**
-     * Store a newly created company.
+     * Safe company catalogue for store accounts.
      */
+    public function browse()
+    {
+        return response()->json([
+            'status' => true,
+            'message' => 'Companies retrieved successfully',
+            'data' => Company::query()
+                ->select([
+                    'id',
+                    'name_company',
+                    'description',
+                    'logo',
+                    'has_3d_access',
+                    'model_3d_expires_at',
+                    'created_at',
+                    'updated_at',
+                ])
+                ->latest()
+                ->get(),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
-            // user fields
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['required', 'string', 'max:500'],
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-
-            // company fields
             'name_company' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
@@ -52,39 +67,39 @@ class CompanyController extends Controller
                     'email' => $validated['email'],
                     'password' => Hash::make($validated['password']),
                     'phone' => $validated['phone'] ?? null,
+                    'address' => $validated['address'],
                     'latitude' => $validated['latitude'],
                     'longitude' => $validated['longitude'],
                     'user_type' => 'company',
                 ]);
 
-                $logoPath = null;
-
-                if ($request->hasFile('logo')) {
-                    $logoPath = $request->file('logo')->store('companies/logos', 'public');
-                }
+                $logo = $request->hasFile('logo')
+                    ? $request->file('logo')->store('companies/logos', 'public')
+                    : null;
 
                 $company = Company::create([
                     'user_id' => $user->id,
                     'name_company' => $validated['name_company'],
                     'description' => $validated['description'],
-                    'logo' => $logoPath,
+                    'logo' => $logo,
                 ]);
 
-                $token = $user->createToken($user->name)->plainTextToken;
-
                 return [
+                    'user' => $user->load('company'),
                     'company' => $company->load('user'),
-                    'token' => $token,
+                    'token' => $user->createToken($user->name)->plainTextToken,
                 ];
             });
 
             return response()->json([
                 'status' => true,
                 'message' => 'Company created successfully',
-                'data' => $result['company'],
-                'token' => $result['token'],
+                'data' => [
+                    'user' => $result['user'],
+                    'company' => $result['company'],
+                    'token' => $result['token'],
+                ],
             ], 201);
-
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -94,49 +109,41 @@ class CompanyController extends Controller
         }
     }
 
-    /**
-     * Display the specified company.
-     */
     public function show(Company $company)
     {
         return response()->json([
             'status' => true,
             'message' => 'Company retrieved successfully',
             'data' => $company->load(['user', 'cars', 'productDetails', 'stores']),
-        ], 200);
+        ]);
     }
 
-    /**
-     * Update the specified company.
-     */
     public function update(Request $request, Company $company)
     {
         $validated = $request->validate([
-            // user fields
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'email', 'max:255', 'unique:users,email,' . $company->user_id],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'address' => ['sometimes', 'string', 'max:500'],
             'latitude' => ['sometimes', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'numeric', 'between:-180,180'],
-
-            // company fields
             'name_company' => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'string'],
-            'logo' => ['sometimes', 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
 
         try {
-            $updatedCompany = DB::transaction(function () use ($request, $validated, $company) {
+            $updated = DB::transaction(function () use ($request, $validated, $company) {
                 $userData = collect($validated)
-                    ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
+                    ->only(['name', 'email', 'phone', 'address', 'latitude', 'longitude'])
                     ->toArray();
 
                 if (!empty($validated['password'])) {
                     $userData['password'] = Hash::make($validated['password']);
                 }
 
-                if (!empty($userData)) {
+                if ($userData !== []) {
                     $company->user->update($userData);
                 }
 
@@ -149,10 +156,11 @@ class CompanyController extends Controller
                         Storage::disk('public')->delete($company->logo);
                     }
 
-                    $companyData['logo'] = $request->file('logo')->store('companies/logos', 'public');
+                    $companyData['logo'] = $request->file('logo')
+                        ->store('companies/logos', 'public');
                 }
 
-                if (!empty($companyData)) {
+                if ($companyData !== []) {
                     $company->update($companyData);
                 }
 
@@ -162,9 +170,8 @@ class CompanyController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Company updated successfully',
-                'data' => $updatedCompany,
-            ], 200);
-
+                'data' => $updated,
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
@@ -174,25 +181,60 @@ class CompanyController extends Controller
         }
     }
 
+
     /**
-     * Remove the specified company.
+     * Update the authenticated company's logo without exposing another
+     * company's resource identifier to the mobile application.
      */
+    public function updateOwnLogo(Request $request)
+    {
+        $company = $request->user()?->company;
+
+        if (!$company) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Company account not found',
+                'data' => null,
+            ], 404);
+        }
+
+        $request->validate([
+            'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+
+        try {
+            if ($company->logo) {
+                Storage::disk('public')->delete($company->logo);
+            }
+
+            $company->update([
+                'logo' => $request->file('logo')->store('companies/logos', 'public'),
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Company logo updated successfully',
+                'data' => $company->fresh()->load('user'),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update company logo',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function destroy(Company $company)
     {
         try {
-            DB::transaction(function () use ($company) {
-                if ($company->logo) {
-                    Storage::disk('public')->delete($company->logo);
-                }
-
-                $company->user->delete();
-            });
+            $company->user->delete();
 
             return response()->json([
                 'status' => true,
                 'message' => 'Company deleted successfully',
-            ], 200);
-
+                'data' => null,
+            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,

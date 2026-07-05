@@ -54,6 +54,7 @@ class AuthController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone,
+                    'address' => $user->address,
                     'latitude' => $user->latitude,
                     'longitude' => $user->longitude,
                     'company_id' => $user->driver->car->company_id,
@@ -82,7 +83,7 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user = $request->user();
+        $user = $request->user()->load(['company', 'store', 'driver.car.company']);
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([

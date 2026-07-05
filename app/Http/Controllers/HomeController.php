@@ -79,6 +79,7 @@ class HomeController extends Controller
     {
         $products = ProductDetail::with($this->productDetailRelations)
             ->where('category_id', $id)
+            ->where('status', 'available')
             ->latest()
             ->get();
 
@@ -93,6 +94,7 @@ class HomeController extends Controller
     {
         $products = ProductDetail::with($this->productDetailRelations)
             ->where('company_id', $id)
+            ->where('status', 'available')
             ->latest()
             ->get();
 

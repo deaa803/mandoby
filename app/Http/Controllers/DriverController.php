@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CompanyCar;
 use App\Models\Driver;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class DriverController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:500'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'company_car_id' => [
@@ -43,13 +45,22 @@ class DriverController extends Controller
 
         try {
             $result = DB::transaction(function () use ($validated) {
+                $car = CompanyCar::with('company.user')
+                    ->findOrFail($validated['company_car_id']);
+                $companyUser = $car->company?->user;
+
                 $user = User::create([
                     'name' => $validated['name'],
                     'email' => $validated['email'],
                     'password' => Hash::make($validated['password']),
                     'phone' => $validated['phone'] ?? null,
-                    'latitude' => $validated['latitude'] ?? null,
-                    'longitude' => $validated['longitude'] ?? null,
+                    'address' => $validated['address']
+                        ?? $companyUser?->address
+                        ?? 'عنوان غير محدد',
+                    'latitude' => $validated['latitude']
+                        ?? $companyUser?->latitude,
+                    'longitude' => $validated['longitude']
+                        ?? $companyUser?->longitude,
                     'user_type' => 'driver',
                 ]);
 
@@ -101,6 +112,7 @@ class DriverController extends Controller
             ],
             'password' => ['nullable', 'string', 'min:8'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'address' => ['sometimes', 'required', 'string', 'max:500'],
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
             'company_car_id' => [
@@ -115,7 +127,7 @@ class DriverController extends Controller
         try {
             $updatedDriver = DB::transaction(function () use ($validated, $driver) {
                 $userData = collect($validated)
-                    ->only(['name', 'email', 'phone', 'latitude', 'longitude'])
+                    ->only(['name', 'email', 'phone', 'address', 'latitude', 'longitude'])
                     ->toArray();
 
                 if (! empty($validated['password'])) {

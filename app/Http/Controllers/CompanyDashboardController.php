@@ -10,7 +10,7 @@ class CompanyDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $company = $request->user()->company;
+        $company = $request->user()?->company;
 
         if (!$company) {
             return response()->json([
@@ -20,39 +20,26 @@ class CompanyDashboardController extends Controller
             ], 404);
         }
 
-        $productsCount = ProductDetail::where('company_id', $company->id)->count();
-
-        $ordersQuery = Order::whereHas('productDetails', function ($query) use ($company) {
-            $query->where('company_id', $company->id);
-        });
-
-        $ordersCount = (clone $ordersQuery)->count();
-
-        $pendingOrders = (clone $ordersQuery)
-            ->where('status', 'pending')
-            ->count();
-
-        $completedOrders = (clone $ordersQuery)
-            ->where('status', 'completed')
-            ->count();
-
-        $totalSales = (clone $ordersQuery)->sum('total_price');
-
-        $totalPaid = (clone $ordersQuery)->sum('paid_amount');
-
-        $totalRemaining = (clone $ordersQuery)->sum('remaining_amount');
+        $orders = Order::query()
+            ->whereHas('productDetails', function ($query) use ($company) {
+                $query->where('product_details.company_id', $company->id);
+            });
 
         return response()->json([
             'status' => true,
             'message' => 'Company dashboard retrieved successfully',
             'data' => [
-                'products_count' => $productsCount,
-                'orders_count' => $ordersCount,
-                'pending_orders' => $pendingOrders,
-                'completed_orders' => $completedOrders,
-                'total_sales' => $totalSales,
-                'total_paid' => $totalPaid,
-                'total_remaining' => $totalRemaining,
+                'products_count' => ProductDetail::where('company_id', $company->id)->count(),
+                'orders_count' => (clone $orders)->count(),
+                'pending_orders' => (clone $orders)
+                    ->whereIn('status', ['pending', 'preparing'])
+                    ->count(),
+                'completed_orders' => (clone $orders)
+                    ->where('status', 'delivered')
+                    ->count(),
+                'total_sales' => (float) (clone $orders)->sum('total_price'),
+                'total_paid' => (float) (clone $orders)->sum('paid_amount'),
+                'total_remaining' => (float) (clone $orders)->sum('remaining_amount'),
             ],
         ]);
     }

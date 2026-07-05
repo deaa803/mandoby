@@ -518,6 +518,54 @@ class Product3DModelController extends Controller
         ]);
     }
 
+    public function modelFile(Product3DModel $product3DModel)
+    {
+        $modelFile = $product3DModel->model_file;
+
+        if (!$modelFile) {
+            return response()->json([
+                'status' => false,
+                'message' => '3D model file is not available',
+                'data' => null,
+            ], 404);
+        }
+
+        $modelFile = ltrim($modelFile, '/');
+
+        if (str_starts_with($modelFile, 'public/')) {
+            $modelFile = substr($modelFile, 7);
+        }
+
+        if (str_starts_with($modelFile, 'storage/')) {
+            $modelFile = substr($modelFile, 8);
+        }
+
+        if (!Storage::disk('public')->exists($modelFile)) {
+            return response()->json([
+                'status' => false,
+                'message' => '3D model file was not found in storage',
+                'data' => null,
+            ], 404);
+        }
+
+        $absolutePath = Storage::disk('public')->path($modelFile);
+
+        return response()->file($absolutePath, [
+            'Content-Type' => 'model/gltf-binary',
+            'Content-Disposition' =>
+                'inline; filename="' . basename($absolutePath) . '"',
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers' =>
+                'Origin, Content-Type, Accept, Range',
+            'Access-Control-Expose-Headers' =>
+                'Content-Length, Content-Range, Accept-Ranges',
+            'Cross-Origin-Resource-Policy' => 'cross-origin',
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
+    }
+
     private function belongsToAuthenticatedCompany(
         Request $request,
         Product3DModel $model

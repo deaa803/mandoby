@@ -72,9 +72,13 @@ class Product3DModel extends Model
 
     public function getModelFileUrlAttribute(): ?string
     {
-        return $this->model_file
-            ? Storage::disk('public')->url($this->model_file)
-            : null;
+        if (!$this->model_file || !$this->exists) {
+            return null;
+        }
+
+        return route('product-3d-models.file', [
+            'product3DModel' => $this->getKey(),
+        ]);
     }
 
     public function getThumbnailUrlAttribute(): ?string

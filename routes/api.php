@@ -67,6 +67,21 @@ Route::get('/product-details/{id}', [ProductDetailController::class, 'show']);
 Route::get('/products/{productDetail}/3d-model', [Product3DModelController::class, 'forProduct']);
 Route::get('/product-details/{productDetail}/3d-model', [Product3DModelController::class, 'forProduct']);
 
+Route::options('/product-3d-models/{product3DModel}/file', function () {
+    return response('', 204)->withHeaders([
+        'Access-Control-Allow-Origin' => '*',
+        'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers' => 'Origin, Content-Type, Accept, Range',
+        'Access-Control-Expose-Headers' =>
+            'Content-Length, Content-Range, Accept-Ranges',
+    ]);
+});
+
+Route::get(
+    '/product-3d-models/{product3DModel}/file',
+    [Product3DModelController::class, 'modelFile'],
+)->name('product-3d-models.file');
+
 Route::apiResource('/categories', CategoryController::class)->only(['index', 'show']);
 Route::apiResource('/features', FeatureController::class)->only(['index', 'show']);
 Route::apiResource('/products', ProductController::class)->only(['index', 'show']);

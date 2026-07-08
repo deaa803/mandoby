@@ -26,8 +26,66 @@ class CompanyForm
                     )
                     ->searchable(['name', 'email'])
                     ->preload()
-                    ->required()
+                    ->unique(table: 'companies', column: 'user_id', ignoreRecord: true)
+                    ->required(fn (string $operation): bool => $operation === 'edit')
+                    ->visible(fn (string $operation): bool => $operation === 'edit')
                     ->label('حساب مالك الشركة'),
+
+                TextInput::make('user_name')
+                    ->required(fn (string $operation): bool => $operation === 'create')
+                    ->maxLength(255)
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('اسم مالك الشركة'),
+
+                TextInput::make('user_email')
+                    ->email()
+                    ->required(fn (string $operation): bool => $operation === 'create')
+                    ->maxLength(255)
+                    ->unique(table: 'users', column: 'email')
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('بريد مالك الشركة'),
+
+                TextInput::make('user_password')
+                    ->password()
+                    ->revealable()
+                    ->required(fn (string $operation): bool => $operation === 'create')
+                    ->minLength(8)
+                    ->same('user_password_confirmation')
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('كلمة المرور'),
+
+                TextInput::make('user_password_confirmation')
+                    ->password()
+                    ->revealable()
+                    ->required(fn (string $operation): bool => $operation === 'create')
+                    ->dehydrated(false)
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('تأكيد كلمة المرور'),
+
+                TextInput::make('user_phone')
+                    ->tel()
+                    ->maxLength(30)
+                    ->nullable()
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('رقم هاتف مالك الشركة'),
+
+                TextInput::make('user_address')
+                    ->maxLength(255)
+                    ->nullable()
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('عنوان مالك الشركة'),
+
+                TextInput::make('user_latitude')
+                    ->numeric()
+                    ->nullable()
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('خط العرض'),
+
+                TextInput::make('user_longitude')
+                    ->numeric()
+                    ->nullable()
+                    ->visible(fn (string $operation): bool => $operation === 'create')
+                    ->label('خط الطول'),
 
                 TextInput::make('name_company')
                     ->required()

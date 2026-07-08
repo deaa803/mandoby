@@ -19,15 +19,20 @@ class CheckUserType
 
         if (!$user) {
             return response()->json([
+                'status' => false,
                 'message' => 'Unauthorized',
+                'data' => null,
             ], 401);
         }
 
         if ($user->user_type !== $type) {
             return response()->json([
+                'status' => false,
                 'message' => 'غير مسموح لك بالدخول',
-                'required_type' => $type,
-                'your_type' => $user->user_type,
+                'data' => [
+                    'required_type' => $type,
+                    'your_type' => $user->user_type,
+                ],
             ], 403);
         }
 

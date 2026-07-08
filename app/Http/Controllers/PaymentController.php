@@ -345,6 +345,7 @@ class PaymentController extends Controller
         return response()->json([
             'status' => false,
             'message' => $message,
+            'data' => null,
             'error' => $e->getMessage(),
         ], 500);
     }

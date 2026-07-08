@@ -3,21 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\Driver;
-use App\Services\FcmService;
+use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 
 class TestPushController extends Controller
 {
-    public function send(Request $request, FcmService $fcmService)
+    public function send(Request $request, FirebaseNotificationService $fcmService)
     {
-        $driverId = $request->input('driver_id', 1);
+        $validated = $request->validate([
+            'driver_id' => ['required', 'integer', 'exists:drivers,id'],
+            'order_id' => ['required', 'integer', 'exists:orders,id'],
+        ]);
 
-        $driver = Driver::findOrFail($driverId);
+        $driver = Driver::findOrFail($validated['driver_id']);
 
         if (!$driver->fcm_token) {
             return response()->json([
                 'status' => false,
                 'message' => 'Driver does not have FCM token',
+                'data' => null,
             ], 400);
         }
 
@@ -27,8 +31,8 @@ class TestPushController extends Controller
             body: 'لديك طلب توصيل جديد',
             data: [
                 'type' => 'new_order',
-                'order_id' => 101,
-                'driver_id' => $driver->id,
+                'order_id' => (string) $validated['order_id'],
+                'driver_id' => (string) $driver->id,
             ],
         );
 

@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Driver;
 use App\Models\Order;
 use App\Models\ProductDetail;
-use App\Services\FcmService;
+use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -145,6 +145,52 @@ class OrderController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Order retrieved successfully',
+            'data' => $order->load($this->relations),
+        ]);
+    }
+
+    public function showStoreOrder(Request $request, Order $order)
+    {
+        $store = $request->user()?->store;
+
+        if (!$store) {
+            return $this->notFound('Store account not found');
+        }
+
+        if ((int) $order->store_id !== (int) $store->id) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your store',
+                'data' => null,
+            ], 403);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Store order retrieved successfully',
+            'data' => $order->load($this->relations),
+        ]);
+    }
+
+    public function showCompanyOrder(Request $request, Order $order)
+    {
+        $company = $request->user()?->company;
+
+        if (!$company) {
+            return $this->notFound('Company account not found');
+        }
+
+        if (!$this->orderBelongsToCompany($order, $company->id)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your company',
+                'data' => null,
+            ], 403);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company order retrieved successfully',
             'data' => $order->load($this->relations),
         ]);
     }
@@ -354,7 +400,7 @@ class OrderController extends Controller
     public function assignDriver(
         Request $request,
         Order $order,
-        FcmService $fcmService,
+        FirebaseNotificationService $fcmService,
     ) {
         $company = $request->user()?->company;
 
@@ -372,6 +418,14 @@ class OrderController extends Controller
                 'message' => 'This order does not belong to your company',
                 'data' => null,
             ], 403);
+        }
+
+        if (in_array($order->status, ['delivered', 'cancelled'], true)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Delivered or cancelled orders cannot be assigned to a driver',
+                'data' => null,
+            ], 422);
         }
 
         $driver = Driver::with(['user', 'car.company'])
@@ -467,7 +521,7 @@ class OrderController extends Controller
         $details = ProductDetail::query()
             ->with(['product', 'company'])
             ->whereIn('id', $requested->keys())
-            ->lockForShare()
+            ->sharedLock()
             ->get()
             ->keyBy('id');
 
@@ -585,6 +639,7 @@ class OrderController extends Controller
         return response()->json([
             'status' => false,
             'message' => $message,
+            'data' => null,
             'error' => $e->getMessage(),
         ], 500);
     }

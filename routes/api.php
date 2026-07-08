@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\AdvertisementController;
+use App\Http\Controllers\Api\DeviceTokenController;
+use App\Http\Controllers\Api\FirebaseTestController;
+use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CompanyCarController;
@@ -45,9 +48,16 @@ Route::post('/register/company', [CompanyController::class, 'store']);
 | يفضّل حمايته أو حذفه قبل نشر النسخة الإنتاجية.
 |
 */
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/device-tokens', [DeviceTokenController::class, 'store']);
+    Route::post('/firebase/test-notification', [FirebaseTestController::class, 'send']);
 
-Route::post('/test-push', [TestPushController::class, 'send']);
+    Route::post('/tracking/orders/{order}/location', [TrackingController::class, 'updateOrderLocation']);
+    Route::delete('/tracking/orders/{order}', [TrackingController::class, 'stopOrderTracking']);
 
+
+
+});
 /*
 |--------------------------------------------------------------------------
 | Public application data
@@ -135,6 +145,7 @@ Route::middleware([
     Route::delete('/company/cars/{companyCar}', [CompanyCarController::class, 'destroy']);
 
     Route::get('/company/orders', [OrderController::class, 'companyOrders']);
+    Route::get('/company/orders/{order}', [OrderController::class, 'showCompanyOrder']);
     Route::get('/company/receivables', [OrderController::class, 'companyReceivables']);
     Route::get('/company/payments', [PaymentController::class, 'companyPayments']);
     Route::get('/company/installments', [PaymentController::class, 'companyInstallments']);
@@ -175,6 +186,7 @@ Route::middleware([
     Route::get('/store/my-orders', [OrderController::class, 'myOrders']);
     Route::get('/store/orders/current', [OrderController::class, 'myCurrentOrders']);
     Route::get('/store/orders/completed', [OrderController::class, 'myCompletedOrders']);
+    Route::get('/store/orders/{order}', [OrderController::class, 'showStoreOrder']);
     Route::get('/store/my-debts', [OrderController::class, 'myDebts']);
 
     Route::get('/store/payments', [PaymentController::class, 'storePayments']);
@@ -230,4 +242,5 @@ Route::middleware([
     Route::apiResource('/orders', OrderController::class);
     Route::apiResource('/payments', PaymentController::class);
     Route::apiResource('/drivers', DriverController::class);
+    Route::post('/test-push', [TestPushController::class, 'send']);
 });

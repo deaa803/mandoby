@@ -15,6 +15,9 @@ class Order extends Model
         'date',
         'commission',
         'status',
+        'estimated_delivery_minutes',
+        'estimated_delivery_at',
+        'eta_last_calculated_at',
         'paid_amount',
         'remaining_amount',
         'driver_id'
@@ -22,6 +25,8 @@ class Order extends Model
 
     protected $casts = [
         'date' => 'date',
+        'estimated_delivery_at' => 'datetime',
+        'eta_last_calculated_at' => 'datetime',
     ];
 
     public function store(): \Illuminate\Database\Eloquent\Relations\BelongsTo

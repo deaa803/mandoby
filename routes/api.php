@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Route;
 | Authentication and registration
 |--------------------------------------------------------------------------
 */
+Route::post('order/store', [OrderController::class, 'store']);
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/driver/login', [AuthController::class, 'logindriver']);
@@ -152,6 +153,7 @@ Route::middleware([
 
     Route::get('/company/orders', [OrderController::class, 'companyOrders']);
     Route::get('/company/orders/{order}', [OrderController::class, 'showCompanyOrder']);
+    Route::get('/company/orders/{order}/eta', [OrderController::class, 'estimateDelivery']);
     Route::get('/company/receivables', [OrderController::class, 'companyReceivables']);
     Route::get('/company/payments', [PaymentController::class, 'companyPayments']);
     Route::post('/company/payments', [PaymentController::class, 'store']);
@@ -194,12 +196,12 @@ Route::middleware([
     Route::get('/store/orders/current', [OrderController::class, 'myCurrentOrders']);
     Route::get('/store/orders/completed', [OrderController::class, 'myCompletedOrders']);
     Route::get('/store/orders/{order}', [OrderController::class, 'showStoreOrder']);
+    Route::get('/store/orders/{order}/eta', [OrderController::class, 'estimateDelivery']);
     Route::get('/store/my-debts', [OrderController::class, 'myDebts']);
 
     Route::get('/store/payments', [PaymentController::class, 'storePayments']);
     Route::get('/store/installments', [PaymentController::class, 'storeInstallments']);
 });
-
 /*
 |--------------------------------------------------------------------------
 | Driver routes
@@ -211,14 +213,53 @@ Route::middleware([
     CheckUserType::class . ':driver',
 ])->group(function () {
     Route::get('/driver/profile', [DriverAppController::class, 'profile']);
-    Route::post('/driver/fcm-token', [DriverAppController::class, 'saveFcmToken']);
-    Route::get('/driver/current-order', [DriverAppController::class, 'currentOrder']);
-    Route::get('/driver/delivery-history', [DriverAppController::class, 'deliveryHistory']);
-    Route::post('/driver/orders/{order}/delivered', [DriverAppController::class, 'markAsDelivered']);
-    Route::post('/driver/location', [DriverController::class, 'updateLocation']);
-    Route::post('/drivers/fcm-token', [DriverFcmTokenController::class, 'store']);
-});
 
+    Route::post('/driver/fcm-token', [
+        DriverAppController::class,
+        'saveFcmToken',
+    ]);
+
+    Route::get('/driver/current-order', [
+        DriverAppController::class,
+        'currentOrder',
+    ]);
+
+    Route::get('/driver/delivery-history', [
+        DriverAppController::class,
+        'deliveryHistory',
+    ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Delivery confirmation using QR Code
+    |--------------------------------------------------------------------------
+    */
+    Route::post(
+        '/driver/orders/{order}/confirm-delivery',
+        [OrderController::class, 'confirmDelivery']
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy endpoint
+    |--------------------------------------------------------------------------
+
+    */
+    Route::post(
+        '/driver/orders/{order}/delivered',
+        [DriverAppController::class, 'markAsDelivered']
+    );
+
+    Route::post('/driver/location', [
+        DriverController::class,
+        'updateLocation',
+    ]);
+
+    Route::post('/drivers/fcm-token', [
+        DriverFcmTokenController::class,
+        'store',
+    ]);
+});
 /*
 |--------------------------------------------------------------------------
 | Admin API routes

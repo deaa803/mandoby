@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Services\EstimatedDeliveryService;
 
 class DriverController extends Controller
 {
@@ -187,7 +188,7 @@ class DriverController extends Controller
         }
     }
 
-    public function updateLocation(Request $request)
+    public function updateLocation(Request $request, EstimatedDeliveryService $etaService)
     {
         $validated = $request->validate([
             'current_lat' => ['required', 'numeric', 'between:-90,90'],
@@ -209,10 +210,26 @@ class DriverController extends Controller
             'last_location_at' => now(),
         ]);
 
+        $currentOrder = $user->driver->orders()
+            ->where('status', 'delivering')
+            ->latest()
+            ->first();
+
+        if ($currentOrder) {
+            $etaService->updateOrderEta($currentOrder);
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Driver location updated successfully',
-            'data' => $user->driver->fresh()->load(['user', 'car.company']),
+            'data' => [
+                'driver' => $user->driver->fresh()->load(['user', 'car.company']),
+                'current_order_eta' => $currentOrder ? [
+                    'order_id' => $currentOrder->id,
+                    'estimated_delivery_minutes' => $currentOrder->fresh()->estimated_delivery_minutes,
+                    'estimated_delivery_at' => $currentOrder->fresh()->estimated_delivery_at,
+                ] : null,
+            ],
         ]);
     }
 }

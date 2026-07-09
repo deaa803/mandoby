@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use App\Services\OrderCompanyNotificationService;
 use App\Services\AppNotificationService;
+use App\Services\EstimatedDeliveryService;
+use App\Services\DeliveryQrService;
+use App\Services\DeliveryConfirmationService;
 
 class OrderController extends Controller
 {
@@ -40,7 +43,12 @@ class OrderController extends Controller
      * Flutter normally uses storeBatch() so a multi-company cart is split
      * into one order per company inside one database transaction.
      */
-    public function store(Request $request, OrderCompanyNotificationService $companyNotifier)
+    public function store(
+        Request $request,
+        OrderCompanyNotificationService $companyNotifier,
+        EstimatedDeliveryService $etaService,
+        DeliveryQrService $deliveryQrService,
+    )
     {
         $store = $request->user()?->store;
 
@@ -75,7 +83,9 @@ class OrderController extends Controller
                 );
             });
 
-            $order->load($this->relations);
+            $order = $etaService->updateOrderEta($order);
+            $deliveryQrService->generate($order);
+            $order->refresh()->load($this->relations);
 
             $companyPushResults = $companyNotifier->notifyNewOrder($order);
 
@@ -98,7 +108,12 @@ class OrderController extends Controller
      * Create a separate order for every company represented in the cart.
      * The whole operation succeeds or fails together.
      */
-    public function storeBatch(Request $request, OrderCompanyNotificationService $companyNotifier)
+    public function storeBatch(
+        Request $request,
+        OrderCompanyNotificationService $companyNotifier,
+        EstimatedDeliveryService $etaService,
+        DeliveryQrService $deliveryQrService,
+    )
     {
         $store = $request->user()?->store;
 
@@ -130,6 +145,13 @@ class OrderController extends Controller
                         );
                     })
                     ->values();
+            });
+
+            $orders = $orders->map(function (Order $order) use ($etaService, $deliveryQrService) {
+                $order = $etaService->updateOrderEta($order);
+                $deliveryQrService->generate($order);
+
+                return $order->fresh();
             });
 
             $orders->each->load($this->relations);
@@ -421,6 +443,7 @@ class OrderController extends Controller
         Order $order,
         FirebaseNotificationService $fcmService,
         AppNotificationService $notifications,
+        EstimatedDeliveryService $etaService,
     ) {
         $company = $request->user()?->company;
 
@@ -478,6 +501,7 @@ class OrderController extends Controller
             $driver->update(['status' => 'busy']);
         });
 
+        $order = $etaService->updateOrderEta($order);
         $order->load($this->relations);
 
         $driverPushResult = [
@@ -548,6 +572,54 @@ class OrderController extends Controller
                 'driver_push_result' => $driverPushResult,
                 'store_notification_id' => $storeNotification?->id,
                 'store_push_result' => $storePushResult,
+            ],
+        ]);
+    }
+
+    public function estimateDelivery(Request $request, Order $order, EstimatedDeliveryService $etaService)
+    {
+        $user = $request->user();
+
+        if ($user?->user_type === 'store') {
+            $store = $user->store;
+
+            if (! $store || (int) $order->store_id !== (int) $store->id) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'This order does not belong to your store',
+                    'data' => null,
+                ], 403);
+            }
+        } elseif ($user?->user_type === 'company') {
+            $company = $user->company;
+
+            if (! $company || ! $this->orderBelongsToCompany($order, $company->id)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'This order does not belong to your company',
+                    'data' => null,
+                ], 403);
+            }
+        } elseif ($user?->user_type !== 'admin') {
+            return response()->json([
+                'status' => false,
+                'message' => 'You are not allowed to estimate this order delivery time',
+                'data' => null,
+            ], 403);
+        }
+
+        $etaService->updateOrderEta($order);
+        $order->load($this->relations);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Estimated delivery time calculated successfully',
+            'data' => [
+                'order_id' => $order->id,
+                'estimated_delivery_minutes' => $order->estimated_delivery_minutes,
+                'estimated_delivery_at' => $order->estimated_delivery_at,
+                'eta_last_calculated_at' => $order->eta_last_calculated_at,
+                'order' => $order,
             ],
         ]);
     }
@@ -703,5 +775,41 @@ class OrderController extends Controller
             'data' => null,
             'error' => $e->getMessage(),
         ], 500);
+    }
+
+    public function confirmDelivery(
+        Request $request,
+        Order $order,
+        DeliveryConfirmationService $confirmationService,
+    ) {
+        $driver = $request->user()?->driver;
+
+        if (! $driver) {
+            return $this->notFound('Driver account not found');
+        }
+
+        $validated = $request->validate([
+            'qr_code' => ['required', 'string'],
+        ]);
+
+        try {
+            $order = $confirmationService->confirm(
+                order: $order,
+                driver: $driver,
+                qrCode: $validated['qr_code'],
+            );
+
+            $order->load($this->relations);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Order delivered successfully',
+                'data' => $order,
+            ]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to confirm delivery', $e);
+        }
     }
 }

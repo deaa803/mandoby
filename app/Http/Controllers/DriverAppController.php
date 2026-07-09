@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Driver;
 use App\Models\Order;
+use App\Services\FirebaseNotificationService;
+use App\Services\AppNotificationService;
+use App\Services\FirebaseTrackingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -133,7 +136,9 @@ class DriverAppController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Current order found',
-            'data' => ['order' => $order],
+            'data' => [
+                'order' => $order,
+            ],
         ]);
     }
 
@@ -172,12 +177,19 @@ class DriverAppController extends Controller
             'message' => $orders->isEmpty()
                 ? 'No delivered orders found'
                 : 'Delivered orders found',
-            'data' => ['orders' => $orders],
+            'data' => [
+                'orders' => $orders,
+            ],
         ]);
     }
 
-    public function markAsDelivered(Request $request, Order $order)
-    {
+    public function markAsDelivered(
+        Request $request,
+        Order $order,
+        FirebaseNotificationService $firebase,
+        FirebaseTrackingService $tracking,
+        AppNotificationService $notifications
+    ) {
         $user = $request->user()->load('driver');
 
         if ($user->user_type !== 'driver') {
@@ -202,17 +214,34 @@ class DriverAppController extends Controller
         }
 
         if ($order->status === 'delivered') {
+            $order->load([
+                'store.user',
+                'productDetails.product',
+                'productDetails.category',
+                'productDetails.company',
+                'productDetails.images',
+            ]);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Order already delivered',
-                'data' => ['order' => $order],
+                'data' => [
+                    'order' => $order,
+                ],
             ]);
         }
 
         DB::transaction(function () use ($order, $user) {
-            $order->update(['status' => 'delivered']);
-            $user->driver->update(['status' => 'available']);
+            $order->update([
+                'status' => 'delivered',
+            ]);
+
+            $user->driver->update([
+                'status' => 'available',
+            ]);
         });
+
+        $tracking->stopOrderTracking($order->id);
 
         $order->load([
             'store.user',
@@ -222,10 +251,94 @@ class DriverAppController extends Controller
             'productDetails.images',
         ]);
 
+        $companies = $order->productDetails
+            ->pluck('company')
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $companyPushResults = [];
+
+        foreach ($companies as $company) {
+            if (! $company->user_id) {
+                $companyPushResults[] = [
+                    'company_id' => $company->id,
+                    'success' => false,
+                    'message' => 'Company does not have user_id.',
+                ];
+
+                continue;
+            }
+
+            $title = 'تم تسليم الطلب';
+            $body = "قام السائق {$user->name} بتسليم الطلب رقم {$order->id}";
+            $data = [
+                'type' => 'order_delivered',
+                'order_id' => (string) $order->id,
+                'driver_id' => (string) $user->driver->id,
+            ];
+
+            $notification = $notifications->create(
+                userId: $company->user_id,
+                title: $title,
+                body: $body,
+                type: 'order_delivered',
+                orderId: $order->id,
+                data: $data
+            );
+
+            $companyPushResults[] = [
+                'company_id' => $company->id,
+                'notification_id' => $notification->id,
+                'result' => $firebase->sendToUser(
+                    userId: $company->user_id,
+                    title: $title,
+                    body: $body,
+                    data: $data,
+                    appType: 'company'
+                ),
+            ];
+        }
+
+        $storePushResult = [
+            'success' => false,
+            'message' => 'Store does not have a user account.',
+        ];
+
+        $storeNotification = null;
+
+        if ($order->store?->user_id) {
+            $storeNotification = $notifications->create(
+                userId: $order->store->user_id,
+                title: 'تم تسليم الطلب',
+                body: "تم تسليم طلبك رقم {$order->id} بنجاح",
+                type: 'store_order_delivered',
+                orderId: $order->id,
+                data: [
+                    'type' => 'store_order_delivered',
+                    'order_id' => (string) $order->id,
+                    'driver_id' => (string) $user->driver->id,
+                ]
+            );
+
+            $storePushResult = $firebase->sendToUser(
+                userId: $order->store->user_id,
+                title: $storeNotification->title,
+                body: $storeNotification->body,
+                data: $storeNotification->data ?? [],
+                appType: 'store'
+            );
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Order marked as delivered successfully',
-            'data' => ['order' => $order],
+            'data' => [
+                'order' => $order,
+                'company_push_results' => $companyPushResults,
+                'store_notification_id' => $storeNotification?->id,
+                'store_push_result' => $storePushResult,
+            ],
         ]);
     }
 }

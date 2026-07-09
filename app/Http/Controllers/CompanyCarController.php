@@ -57,6 +57,7 @@ class CompanyCarController extends Controller
                 'max:255',
                 'unique:company_cars,plate_number',
             ],
+
             'driver_name' => ['required', 'string', 'max:255'],
             'driver_email' => [
                 'required',
@@ -107,7 +108,7 @@ class CompanyCarController extends Controller
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to create company car and driver account',
+                'message' => 'Failed to create company car',
                 'error' => $e->getMessage(),
             ], 500);
         }

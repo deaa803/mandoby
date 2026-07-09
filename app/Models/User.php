@@ -96,4 +96,15 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasMany(DeviceToken::class);
     }
+
+    public function appNotifications()
+    {
+        return $this->hasMany(AppNotification::class);
+    }
+
+    public function unreadAppNotifications()
+    {
+        return $this->hasMany(AppNotification::class)->whereNull('read_at');
+    }
+
 }

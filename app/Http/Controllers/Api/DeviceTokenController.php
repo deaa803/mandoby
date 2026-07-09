@@ -13,7 +13,7 @@ class DeviceTokenController extends Controller
         $data = $request->validate([
             'fcm_token' => ['required', 'string', 'max:500'],
             'platform' => ['nullable', 'in:android,ios,web,unknown'],
-            'app_type' => ['required', 'in:driver,company,customer'],
+            'app_type' => ['required', 'in:driver,company,store,customer'],
         ]);
 
         DeviceToken::updateOrCreate(

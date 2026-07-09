@@ -27,6 +27,7 @@ return new class extends Migration
             $table->enum('app_type', [
                 'driver',
                 'company',
+                'store',
                 'customer',
             ])->index();
 

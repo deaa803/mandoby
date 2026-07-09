@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use App\Services\OrderCompanyNotificationService;
+use App\Services\AppNotificationService;
 
 class OrderController extends Controller
 {
@@ -38,7 +40,7 @@ class OrderController extends Controller
      * Flutter normally uses storeBatch() so a multi-company cart is split
      * into one order per company inside one database transaction.
      */
-    public function store(Request $request)
+    public function store(Request $request, OrderCompanyNotificationService $companyNotifier)
     {
         $store = $request->user()?->store;
 
@@ -73,10 +75,17 @@ class OrderController extends Controller
                 );
             });
 
+            $order->load($this->relations);
+
+            $companyPushResults = $companyNotifier->notifyNewOrder($order);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Order created successfully',
-                'data' => $order->load($this->relations),
+                'data' => [
+                    'order' => $order,
+                    'company_push_results' => $companyPushResults,
+                ],
             ], 201);
         } catch (ValidationException $e) {
             throw $e;
@@ -89,7 +98,7 @@ class OrderController extends Controller
      * Create a separate order for every company represented in the cart.
      * The whole operation succeeds or fails together.
      */
-    public function storeBatch(Request $request)
+    public function storeBatch(Request $request, OrderCompanyNotificationService $companyNotifier)
     {
         $store = $request->user()?->store;
 
@@ -125,12 +134,22 @@ class OrderController extends Controller
 
             $orders->each->load($this->relations);
 
+            $companyPushResults = $orders
+                ->map(function (Order $order) use ($companyNotifier) {
+                    return [
+                        'order_id' => $order->id,
+                        'results' => $companyNotifier->notifyNewOrder($order),
+                    ];
+                })
+                ->values();
+
             return response()->json([
                 'status' => true,
                 'message' => 'Orders created successfully',
                 'data' => [
                     'orders_count' => $orders->count(),
                     'orders' => $orders,
+                    'company_push_results' => $companyPushResults,
                 ],
             ], 201);
         } catch (ValidationException $e) {
@@ -401,6 +420,7 @@ class OrderController extends Controller
         Request $request,
         Order $order,
         FirebaseNotificationService $fcmService,
+        AppNotificationService $notifications,
     ) {
         $company = $request->user()?->company;
 
@@ -460,33 +480,74 @@ class OrderController extends Controller
 
         $order->load($this->relations);
 
-        $pushError = null;
+        $driverPushResult = [
+            'success' => false,
+            'message' => 'Driver does not have an FCM token.',
+        ];
+
+        $driverNotification = $notifications->create(
+            userId: $driver->user_id,
+            title: 'طلب توصيل جديد',
+            body: 'تم إسناد طلب جديد إليك',
+            type: 'driver_assigned_order',
+            orderId: $order->id,
+            data: [
+                'type' => 'driver_assigned_order',
+                'order_id' => (string) $order->id,
+                'driver_id' => (string) $driver->id,
+            ]
+        );
 
         if ($driver->fcm_token) {
-            try {
-                $fcmService->sendToToken(
-                    token: $driver->fcm_token,
-                    title: 'طلب توصيل جديد',
-                    body: 'تم إسناد طلب جديد إليك',
-                    data: [
-                        'type' => 'new_order',
-                        'order_id' => (string) $order->id,
-                        'driver_id' => (string) $driver->id,
-                    ],
-                );
-            } catch (\Throwable $e) {
-                $pushError = $e->getMessage();
-            }
+            $driverPushResult = $fcmService->sendToToken(
+                token: $driver->fcm_token,
+                title: $driverNotification->title,
+                body: $driverNotification->body,
+                data: $driverNotification->data ?? [],
+            );
+        }
+
+        $storePushResult = [
+            'success' => false,
+            'message' => 'Store does not have a user account.',
+        ];
+
+        $storeNotification = null;
+
+        if ($order->store?->user_id) {
+            $storeNotification = $notifications->create(
+                userId: $order->store->user_id,
+                title: 'تم إسناد سائق للطلب',
+                body: "تم إسناد السائق {$driver->user?->name} للطلب رقم {$order->id}",
+                type: 'driver_assigned_to_order',
+                orderId: $order->id,
+                data: [
+                    'type' => 'driver_assigned_to_order',
+                    'order_id' => (string) $order->id,
+                    'driver_id' => (string) $driver->id,
+                ]
+            );
+
+            $storePushResult = $fcmService->sendToUser(
+                userId: $order->store->user_id,
+                title: $storeNotification->title,
+                body: $storeNotification->body,
+                data: $storeNotification->data ?? [],
+                appType: 'store',
+            );
         }
 
         return response()->json([
             'status' => true,
-            'message' => $pushError
-                ? 'Order assigned, but push notification failed'
-                : 'Order assigned to driver successfully',
+            'message' => ($driverPushResult['success'] ?? false)
+                ? 'Order assigned to driver successfully'
+                : 'Order assigned, but driver push notification was not sent',
             'data' => [
                 'order' => $order,
-                'push_error' => $pushError,
+                'driver_notification_id' => $driverNotification->id ?? null,
+                'driver_push_result' => $driverPushResult,
+                'store_notification_id' => $storeNotification?->id,
+                'store_push_result' => $storePushResult,
             ],
         ]);
     }

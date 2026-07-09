@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdvertisementController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\FirebaseTestController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
@@ -113,6 +114,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 });
 
 /*
@@ -148,6 +154,7 @@ Route::middleware([
     Route::get('/company/orders/{order}', [OrderController::class, 'showCompanyOrder']);
     Route::get('/company/receivables', [OrderController::class, 'companyReceivables']);
     Route::get('/company/payments', [PaymentController::class, 'companyPayments']);
+    Route::post('/company/payments', [PaymentController::class, 'store']);
     Route::get('/company/installments', [PaymentController::class, 'companyInstallments']);
 
     Route::post(

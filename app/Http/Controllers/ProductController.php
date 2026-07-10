@@ -12,7 +12,7 @@ class ProductController extends Controller
      */
     public function index()
     {
-        $products = Product::with('details')
+        $products = Product::with('details.discount')
             ->latest()
             ->get();
 
@@ -52,7 +52,7 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Product retrieved successfully',
-            'data' => $product->load('details'),
+            'data' => $product->load('details.discount'),
         ]);
     }
 
@@ -71,7 +71,7 @@ class ProductController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Product updated successfully',
-            'data' => $product->fresh()->load('details'),
+            'data' => $product->fresh()->load('details.discount'),
         ]);
     }
 

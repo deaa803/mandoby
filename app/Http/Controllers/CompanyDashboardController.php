@@ -25,6 +25,12 @@ class CompanyDashboardController extends Controller
                 $query->where('product_details.company_id', $company->id);
             });
 
+        $subscription = $company->subscriptions()
+            ->usable()
+            ->with('plan.features')
+            ->orderByDesc('end_date')
+            ->first();
+
         return response()->json([
             'status' => true,
             'message' => 'Company dashboard retrieved successfully',
@@ -40,6 +46,10 @@ class CompanyDashboardController extends Controller
                 'total_sales' => (float) (clone $orders)->sum('total_price'),
                 'total_paid' => (float) (clone $orders)->sum('paid_amount'),
                 'total_remaining' => (float) (clone $orders)->sum('remaining_amount'),
+                'subscription' => $subscription,
+                'subscription_features' => $company->activeFeatureKeys(),
+                'can_use_3d_models' => $company->hasActiveFeature('3d_models'),
+                'can_view_advanced_reports' => $company->hasActiveFeature('advanced_reports'),
             ],
         ]);
     }

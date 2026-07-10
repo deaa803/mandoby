@@ -18,6 +18,10 @@ class CompanyInfolist
                 TextEntry::make('user.name')->label('المالك'),
                 TextEntry::make('user.email')->label('البريد الإلكتروني'),
                 TextEntry::make('user.phone')->label('رقم الهاتف')->placeholder('-'),
+                TextEntry::make('delivery_radius_km')->suffix(' كم')->label('حد التوصيل العادي'),
+                TextEntry::make('extra_delivery_fee_per_km')->money('SYP')->label('أجرة الكيلومتر الزائد'),
+                TextEntry::make('currentSubscription.plan.name')->label('الاشتراك الحالي')->placeholder('-'),
+                TextEntry::make('currentSubscription.end_date')->dateTime()->label('انتهاء الاشتراك')->placeholder('-'),
                 TextEntry::make('created_at')->dateTime()->label('تاريخ الإنشاء'),
                 TextEntry::make('updated_at')->dateTime()->label('آخر تحديث'),
             ]);

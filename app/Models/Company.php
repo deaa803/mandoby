@@ -14,13 +14,13 @@ class Company extends Model
         'name_company',
         'description',
         'logo',
-        'has_3d_access',
-        'model_3d_expires_at',
+        'delivery_radius_km',
+        'extra_delivery_fee_per_km',
     ];
 
     protected $casts = [
-        'has_3d_access' => 'boolean',
-        'model_3d_expires_at' => 'datetime',
+        'delivery_radius_km' => 'decimal:2',
+        'extra_delivery_fee_per_km' => 'decimal:2',
     ];
 
     protected static function booted(): void
@@ -77,5 +77,42 @@ class Company extends Model
     public function product3dModels()
     {
         return $this->hasMany(Product3DModel::class);
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(CompanySubscription::class);
+    }
+
+    public function currentSubscription()
+    {
+        return $this->hasOne(CompanySubscription::class)
+            ->usable()
+            ->latestOfMany('end_date');
+    }
+
+    public function hasActiveFeature(string $featureKey): bool
+    {
+        return $this->subscriptions()
+            ->usable()
+            ->whereHas('plan.features', function ($query) use ($featureKey) {
+                $query->where('key', $featureKey)
+                    ->where('is_active', true);
+            })
+            ->exists();
+    }
+
+    public function activeFeatureKeys(): array
+    {
+        return $this->subscriptions()
+            ->usable()
+            ->with('plan.features')
+            ->get()
+            ->flatMap(fn (CompanySubscription $subscription) => $subscription->plan?->features ?? [])
+            ->where('is_active', true)
+            ->pluck('key')
+            ->unique()
+            ->values()
+            ->all();
     }
 }

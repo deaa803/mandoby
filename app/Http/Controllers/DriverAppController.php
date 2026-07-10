@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Services\FirebaseNotificationService;
 use App\Services\AppNotificationService;
 use App\Services\FirebaseTrackingService;
+use App\Services\DeliveryConfirmationService;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -188,7 +190,8 @@ class DriverAppController extends Controller
         Order $order,
         FirebaseNotificationService $firebase,
         FirebaseTrackingService $tracking,
-        AppNotificationService $notifications
+        AppNotificationService $notifications,
+        DeliveryConfirmationService $confirmationService
     ) {
         $user = $request->user()->load('driver');
 
@@ -231,15 +234,19 @@ class DriverAppController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($order, $user) {
-            $order->update([
-                'status' => 'delivered',
-            ]);
+        $validated = $request->validate([
+            'qr_code' => ['required', 'string'],
+        ]);
 
-            $user->driver->update([
-                'status' => 'available',
-            ]);
-        });
+        try {
+            $order = $confirmationService->confirm(
+                order: $order,
+                driver: $user->driver,
+                qrCode: $validated['qr_code'],
+            );
+        } catch (ValidationException $e) {
+            throw $e;
+        }
 
         $tracking->stopOrderTracking($order->id);
 

@@ -9,6 +9,8 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CompanyCarController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CompanyReportController;
+use App\Http\Controllers\CompanySubscriptionController;
 use App\Http\Controllers\CompanyDashboardController;
 use App\Http\Controllers\DriverAppController;
 use App\Http\Controllers\DriverController;
@@ -108,7 +110,7 @@ Route::apiResource('/advertisements', AdvertisementController::class)->only(['in
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user()->load([
-            'company',
+            'company.currentSubscription.plan.features',
             'store',
             'driver.car.company',
         ]);
@@ -133,6 +135,8 @@ Route::middleware([
     CheckUserType::class . ':company',
 ])->group(function () {
     Route::get('/company/dashboard', [CompanyDashboardController::class, 'index']);
+    Route::get('/company/subscription', [CompanySubscriptionController::class, 'current']);
+    Route::get('/company/reports', [CompanyReportController::class, 'index']);
     Route::post('/company/profile/logo', [CompanyController::class, 'updateOwnLogo']);
 
     Route::get('/company/products', [ProductDetailController::class, 'myCompanyProducts']);

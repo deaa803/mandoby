@@ -16,6 +16,7 @@ class HomeController extends Controller
         'company',
         'images',
         'features',
+        'discount',
         'model3d',
     ];
 
@@ -54,6 +55,7 @@ class HomeController extends Controller
             'productDetail.category',
             'productDetail.images',
             'productDetail.features',
+            'productDetail.discount',
             'productDetail.model3d',
         ])
             ->where('status', 'active')
@@ -123,6 +125,7 @@ class HomeController extends Controller
             'productDetail.category',
             'productDetail.images',
             'productDetail.features',
+            'productDetail.discount',
             'productDetail.model3d',
         ])
             ->where('status', 'active')

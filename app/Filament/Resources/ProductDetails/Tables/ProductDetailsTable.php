@@ -48,6 +48,11 @@ class ProductDetailsTable
                     ->label('الحد الأدنى')
                     ->sortable(),
 
+                TextColumn::make('discount.discount_percentage')
+                    ->suffix('%')
+                    ->placeholder('-')
+                    ->label('الخصم'),
+
                 TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {

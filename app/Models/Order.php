@@ -18,6 +18,12 @@ class Order extends Model
         'estimated_delivery_minutes',
         'estimated_delivery_at',
         'eta_last_calculated_at',
+        'delivery_distance_km',
+        'extra_delivery_km',
+        'extra_delivery_fee',
+        'delivery_qr_code',
+        'delivery_qr_used_at',
+        'delivered_at',
         'paid_amount',
         'remaining_amount',
         'driver_id'
@@ -27,6 +33,11 @@ class Order extends Model
         'date' => 'date',
         'estimated_delivery_at' => 'datetime',
         'eta_last_calculated_at' => 'datetime',
+        'delivery_distance_km' => 'decimal:2',
+        'extra_delivery_km' => 'integer',
+        'extra_delivery_fee' => 'decimal:2',
+        'delivery_qr_used_at' => 'datetime',
+        'delivered_at' => 'datetime',
     ];
 
     public function store(): \Illuminate\Database\Eloquent\Relations\BelongsTo

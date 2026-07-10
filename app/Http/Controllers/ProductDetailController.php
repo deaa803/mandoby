@@ -17,6 +17,7 @@ class ProductDetailController extends Controller
         'category',
         'images',
         'features',
+        'discount',
         'model3d',
     ];
 
@@ -72,6 +73,10 @@ class ProductDetailController extends Controller
             'features' => ['nullable', 'array'],
             'features.*.feature_id' => ['required', 'integer', 'distinct', 'exists:features,id'],
             'features.*.value' => ['required', 'string', 'max:255'],
+
+            'has_discount' => ['nullable', 'boolean'],
+            'discount_quantity' => ['required_if:has_discount,1,true', 'nullable', 'integer', 'min:1'],
+            'discount_percentage' => ['required_if:has_discount,1,true', 'nullable', 'numeric', 'gt:0', 'max:100'],
         ]);
 
         try {
@@ -101,6 +106,8 @@ class ProductDetailController extends Controller
                 if (!empty($featuresData)) {
                     $productDetail->features()->attach($featuresData);
                 }
+
+                $this->syncDiscount($productDetail, $validated);
 
                 if ($request->hasFile('image')) {
                     $this->storeProductImage($productDetail->id, $request->file('image'));
@@ -175,6 +182,10 @@ class ProductDetailController extends Controller
             'features' => ['sometimes', 'array'],
             'features.*.feature_id' => ['required', 'integer', 'distinct', 'exists:features,id'],
             'features.*.value' => ['required', 'string', 'max:255'],
+
+            'has_discount' => ['sometimes', 'boolean'],
+            'discount_quantity' => ['required_if:has_discount,1,true', 'nullable', 'integer', 'min:1'],
+            'discount_percentage' => ['required_if:has_discount,1,true', 'nullable', 'numeric', 'gt:0', 'max:100'],
         ]);
 
         try {
@@ -216,6 +227,10 @@ class ProductDetailController extends Controller
                     }
 
                     $productDetail->features()->sync($featuresData);
+                }
+
+                if (array_key_exists('has_discount', $validated)) {
+                    $this->syncDiscount($productDetail, $validated);
                 }
 
                 if ($request->hasFile('image')) {
@@ -272,6 +287,7 @@ class ProductDetailController extends Controller
                 $product = $productDetail->product;
 
                 $productDetail->features()->detach();
+                $productDetail->discount()?->delete();
 
                 if ($productDetail->model3d) {
                     $productDetail->model3d->delete();
@@ -332,6 +348,23 @@ class ProductDetailController extends Controller
             'message' => 'My company products retrieved successfully',
             'data' => $products,
         ]);
+    }
+
+    private function syncDiscount(ProductDetail $productDetail, array $data): void
+    {
+        if (!(bool) ($data['has_discount'] ?? false)) {
+            $productDetail->discount()?->delete();
+
+            return;
+        }
+
+        $productDetail->discount()->updateOrCreate(
+            ['product_detail_id' => $productDetail->id],
+            [
+                'quantity' => (int) $data['discount_quantity'],
+                'discount_percentage' => (float) $data['discount_percentage'],
+            ]
+        );
     }
 
     private function storeProductImage(int $productDetailId, $imageFile): Image

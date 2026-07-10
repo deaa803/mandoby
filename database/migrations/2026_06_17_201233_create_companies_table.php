@@ -19,8 +19,8 @@ return new class extends Migration
             $table->string('name_company');
             $table->text('description')->nullable();
             $table->string('logo')->nullable();
-            $table->boolean('has_3d_access')->default(false);
-            $table->timestamp('model_3d_expires_at')->nullable();
+            $table->decimal('delivery_radius_km', 8, 2)->default(10);
+            $table->decimal('extra_delivery_fee_per_km', 15, 2)->default(1000);
 
             $table->timestamps();
         });

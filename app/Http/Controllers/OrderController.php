@@ -15,6 +15,7 @@ use App\Services\AppNotificationService;
 use App\Services\EstimatedDeliveryService;
 use App\Services\DeliveryQrService;
 use App\Services\DeliveryConfirmationService;
+use App\Services\DeliveryFeeService;
 
 class OrderController extends Controller
 {
@@ -26,6 +27,7 @@ class OrderController extends Controller
         'productDetails.company',
         'productDetails.category',
         'productDetails.images',
+        'productDetails.discount',
         'payments',
     ];
 
@@ -48,6 +50,7 @@ class OrderController extends Controller
         OrderCompanyNotificationService $companyNotifier,
         EstimatedDeliveryService $etaService,
         DeliveryQrService $deliveryQrService,
+        DeliveryFeeService $deliveryFeeService,
     )
     {
         $store = $request->user()?->store;
@@ -68,7 +71,7 @@ class OrderController extends Controller
         ]);
 
         try {
-            $order = DB::transaction(function () use ($validated, $store) {
+            $order = DB::transaction(function () use ($validated, $store, $deliveryFeeService) {
                 $prepared = $this->prepareProducts($validated['products']);
 
                 if ($prepared['company_ids']->count() !== 1) {
@@ -80,6 +83,7 @@ class OrderController extends Controller
                 return $this->createOrder(
                     storeId: $store->id,
                     lines: $prepared['lines'],
+                    deliveryFeeService: $deliveryFeeService,
                 );
             });
 
@@ -113,6 +117,7 @@ class OrderController extends Controller
         OrderCompanyNotificationService $companyNotifier,
         EstimatedDeliveryService $etaService,
         DeliveryQrService $deliveryQrService,
+        DeliveryFeeService $deliveryFeeService,
     )
     {
         $store = $request->user()?->store;
@@ -133,15 +138,16 @@ class OrderController extends Controller
         ]);
 
         try {
-            $orders = DB::transaction(function () use ($validated, $store) {
+            $orders = DB::transaction(function () use ($validated, $store, $deliveryFeeService) {
                 $prepared = $this->prepareProducts($validated['products']);
 
                 return $prepared['lines']
                     ->groupBy('company_id')
-                    ->map(function (Collection $companyLines) use ($store) {
+                    ->map(function (Collection $companyLines) use ($store, $deliveryFeeService) {
                         return $this->createOrder(
                             storeId: $store->id,
                             lines: $companyLines,
+                            deliveryFeeService: $deliveryFeeService,
                         );
                     })
                     ->values();
@@ -240,7 +246,7 @@ class OrderController extends Controller
      * Administrative update. Product prices and discounts are always
      * recalculated from Laravel and never trusted from the request.
      */
-    public function update(Request $request, Order $order)
+    public function update(Request $request, Order $order, DeliveryFeeService $deliveryFeeService)
     {
         $validated = $request->validate([
             'date' => ['sometimes', 'date'],
@@ -265,7 +271,7 @@ class OrderController extends Controller
         ]);
 
         try {
-            $updated = DB::transaction(function () use ($validated, $order) {
+            $updated = DB::transaction(function () use ($validated, $order, $deliveryFeeService) {
                 $orderData = collect($validated)
                     ->only(['date', 'commission', 'status', 'driver_id'])
                     ->toArray();
@@ -279,7 +285,14 @@ class OrderController extends Controller
                         ]);
                     }
 
-                    $total = $prepared['lines']->sum('line_total');
+                    $companyId = (int) $prepared['company_ids']->first();
+                    $delivery = $deliveryFeeService->calculateByIds($order->store_id, $companyId);
+                    $productsTotal = round((float) $prepared['lines']->sum('line_total'), 2);
+                    $total = round($productsTotal + (float) $delivery['extra_delivery_fee'], 2);
+
+                    $orderData['delivery_distance_km'] = $delivery['delivery_distance_km'];
+                    $orderData['extra_delivery_km'] = $delivery['extra_delivery_km'];
+                    $orderData['extra_delivery_fee'] = $delivery['extra_delivery_fee'];
                     $orderData['total_price'] = $total;
                     $orderData['remaining_amount'] = max(
                         $total - (float) $order->paid_amount,
@@ -652,7 +665,7 @@ class OrderController extends Controller
     {
         $requested = collect($products)->keyBy('product_detail_id');
         $details = ProductDetail::query()
-            ->with(['product', 'company'])
+            ->with(['product', 'company', 'discount'])
             ->whereIn('id', $requested->keys())
             ->sharedLock()
             ->get()
@@ -683,7 +696,7 @@ class OrderController extends Controller
 
             $price = (float) $detail->price;
             $gross = round($price * $quantity, 2);
-            $discountPercent = $this->discountPercentageFor($quantity);
+            $discountPercent = $detail->discountPercentageForQuantity($quantity);
             $discountAmount = round($gross * ($discountPercent / 100), 2);
 
             return [
@@ -703,9 +716,12 @@ class OrderController extends Controller
         ];
     }
 
-    private function createOrder(int $storeId, Collection $lines): Order
+    private function createOrder(int $storeId, Collection $lines, DeliveryFeeService $deliveryFeeService): Order
     {
-        $total = round((float) $lines->sum('line_total'), 2);
+        $companyId = (int) $lines->first()['company_id'];
+        $delivery = $deliveryFeeService->calculateByIds($storeId, $companyId);
+        $productsTotal = round((float) $lines->sum('line_total'), 2);
+        $total = round($productsTotal + (float) $delivery['extra_delivery_fee'], 2);
 
         $order = Order::create([
             'store_id' => $storeId,
@@ -714,6 +730,9 @@ class OrderController extends Controller
             'date' => now()->toDateString(),
             'commission' => 0,
             'status' => 'pending',
+            'delivery_distance_km' => $delivery['delivery_distance_km'],
+            'extra_delivery_km' => $delivery['extra_delivery_km'],
+            'extra_delivery_fee' => $delivery['extra_delivery_fee'],
             'paid_amount' => 0,
             'remaining_amount' => $total,
         ]);
@@ -732,17 +751,6 @@ class OrderController extends Controller
 
         return $order;
     }
-
-    private function discountPercentageFor(int $quantity): float
-    {
-        return match (true) {
-            $quantity >= 50 => 7,
-            $quantity >= 25 => 5,
-            $quantity >= 10 => 2,
-            default => 0,
-        };
-    }
-
     private function companyOrdersQuery(int $companyId)
     {
         return Order::with($this->relations)

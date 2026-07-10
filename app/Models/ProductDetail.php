@@ -11,6 +11,7 @@ class ProductDetail extends Model
 
     protected $appends = [
         'has_3d_model',
+        'has_discount',
     ];
 
     protected $fillable = [
@@ -69,6 +70,33 @@ class ProductDetail extends Model
     public function model3d()
     {
         return $this->hasOne(Product3DModel::class);
+    }
+
+    public function discount()
+    {
+        return $this->hasOne(ProductDiscount::class);
+    }
+
+    public function getHasDiscountAttribute(): bool
+    {
+        if ($this->relationLoaded('discount')) {
+            return $this->getRelation('discount') !== null;
+        }
+
+        return $this->discount()->exists();
+    }
+
+    public function discountPercentageForQuantity(int $quantity): float
+    {
+        $discount = $this->relationLoaded('discount')
+            ? $this->getRelation('discount')
+            : $this->discount()->first();
+
+        if (!$discount || !$discount->appliesToQuantity($quantity)) {
+            return 0;
+        }
+
+        return (float) $discount->discount_percentage;
     }
 
     public function getHas3dModelAttribute(): bool

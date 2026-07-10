@@ -2,12 +2,10 @@
 
 namespace App\Filament\Resources\Companies\Schemas;
 
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -98,28 +96,28 @@ class CompanyForm
                     ->columnSpanFull()
                     ->label('الوصف'),
 
+                TextInput::make('delivery_radius_km')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(10)
+                    ->required()
+                    ->suffix('كم')
+                    ->label('حد التوصيل العادي'),
+
+                TextInput::make('extra_delivery_fee_per_km')
+                    ->numeric()
+                    ->minValue(0)
+                    ->default(1000)
+                    ->required()
+                    ->suffix('ل.س / كم')
+                    ->label('أجرة الكيلومتر الزائد'),
+
                 FileUpload::make('logo')
                     ->image()
                     ->disk('public')
                     ->directory('companies')
                     ->visibility('public')
                     ->label('شعار الشركة'),
-
-                Toggle::make('has_3d_access')
-                    ->label('تفعيل خدمة إنشاء موديلات 3D')
-                    ->helperText('تُفعّل هذه الخدمة فقط للشركات المشتركة والدافعة')
-                    ->default(false)
-                    ->live(),
-
-                DateTimePicker::make('model_3d_expires_at')
-                    ->label('تاريخ انتهاء اشتراك خدمة 3D')
-                    ->helperText('اترك الحقل فارغاً إذا كان الاشتراك بدون تاريخ انتهاء')
-                    ->seconds(false)
-                    ->nullable()
-                    ->visible(
-                        fn ($get): bool =>
-                        (bool) $get('has_3d_access')
-                    ),
             ]);
     }
 }

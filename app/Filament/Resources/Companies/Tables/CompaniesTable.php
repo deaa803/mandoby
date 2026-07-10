@@ -43,6 +43,24 @@ class CompaniesTable
                     ->counts('stores')
                     ->label('المتاجر'),
 
+                TextColumn::make('delivery_radius_km')
+                    ->suffix(' كم')
+                    ->label('حد التوصيل'),
+
+                TextColumn::make('extra_delivery_fee_per_km')
+                    ->money('SYP')
+                    ->label('أجرة الكيلو الزائد')
+                    ->toggleable(),
+
+                TextColumn::make('currentSubscription.plan.name')
+                    ->label('الاشتراك')
+                    ->placeholder('-'),
+
+                TextColumn::make('currentSubscription.end_date')
+                    ->dateTime()
+                    ->label('ينتهي في')
+                    ->placeholder('-'),
+
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

@@ -60,27 +60,10 @@ class Product3DModelController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        if (!$company->has_3d_access) {
+        if (!$company->hasActiveFeature('3d_models')) {
             return response()->json([
                 'status' => false,
-                'message' => '3D model generation is not enabled for this company',
-                'data' => null,
-            ], 403);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | التحقق من انتهاء الاشتراك
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            $company->model_3d_expires_at &&
-            $company->model_3d_expires_at->isPast()
-        ) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Your 3D model subscription has expired',
+                'message' => '3D model generation requires an active subscription',
                 'data' => null,
             ], 403);
         }

@@ -6,6 +6,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class ProductDetailForm
@@ -49,6 +50,30 @@ class ProductDetailForm
                     ->default(1)
                     ->required()
                     ->label('الحد الأدنى للطلب'),
+
+                Toggle::make('has_discount')
+                    ->dehydrated(false)
+                    ->live()
+                    ->label('يوجد خصم على الكمية'),
+
+                TextInput::make('discount_quantity')
+                    ->dehydrated(false)
+                    ->numeric()
+                    ->integer()
+                    ->minValue(1)
+                    ->required(fn ($get): bool => (bool) $get('has_discount'))
+                    ->visible(fn ($get): bool => (bool) $get('has_discount'))
+                    ->label('كمية تطبيق الخصم'),
+
+                TextInput::make('discount_percentage')
+                    ->dehydrated(false)
+                    ->numeric()
+                    ->minValue(0.01)
+                    ->maxValue(100)
+                    ->suffix('%')
+                    ->required(fn ($get): bool => (bool) $get('has_discount'))
+                    ->visible(fn ($get): bool => (bool) $get('has_discount'))
+                    ->label('نسبة الخصم'),
 
                 Select::make('status')
                     ->options([

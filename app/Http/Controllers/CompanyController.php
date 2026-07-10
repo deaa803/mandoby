@@ -16,7 +16,7 @@ class CompanyController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Companies retrieved successfully',
-            'data' => Company::with('user')->latest()->get(),
+            'data' => Company::with(['user', 'currentSubscription.plan.features'])->latest()->get(),
         ]);
     }
 
@@ -35,10 +35,10 @@ class CompanyController extends Controller
                     'name_company',
                     'description',
                     'logo',
-                    'has_3d_access',
-                    'model_3d_expires_at',
                     'created_at',
                     'updated_at',
+                    'delivery_radius_km',
+                    'extra_delivery_fee_per_km',
                 ])
                 ->latest()
                 ->get(),
@@ -58,6 +58,8 @@ class CompanyController extends Controller
             'name_company' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'delivery_radius_km' => ['nullable', 'numeric', 'min:0'],
+            'extra_delivery_fee_per_km' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         try {
@@ -82,6 +84,8 @@ class CompanyController extends Controller
                     'name_company' => $validated['name_company'],
                     'description' => $validated['description'],
                     'logo' => $logo,
+                    'delivery_radius_km' => $validated['delivery_radius_km'] ?? 10,
+                    'extra_delivery_fee_per_km' => $validated['extra_delivery_fee_per_km'] ?? 1000,
                 ]);
 
                 return [
@@ -114,7 +118,7 @@ class CompanyController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Company retrieved successfully',
-            'data' => $company->load(['user', 'cars', 'productDetails', 'stores']),
+            'data' => $company->load(['user', 'cars', 'productDetails', 'stores', 'currentSubscription.plan.features']),
         ]);
     }
 
@@ -131,6 +135,8 @@ class CompanyController extends Controller
             'name_company' => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'string'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'delivery_radius_km' => ['sometimes', 'numeric', 'min:0'],
+            'extra_delivery_fee_per_km' => ['sometimes', 'numeric', 'min:0'],
         ]);
 
         try {
@@ -148,7 +154,7 @@ class CompanyController extends Controller
                 }
 
                 $companyData = collect($validated)
-                    ->only(['name_company', 'description'])
+                    ->only(['name_company', 'description', 'delivery_radius_km', 'extra_delivery_fee_per_km'])
                     ->toArray();
 
                 if ($request->hasFile('logo')) {

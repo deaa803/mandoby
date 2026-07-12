@@ -138,6 +138,7 @@ Route::middleware([
     Route::get('/company/subscription', [CompanySubscriptionController::class, 'current']);
     Route::get('/company/reports', [CompanyReportController::class, 'index']);
     Route::post('/company/profile/logo', [CompanyController::class, 'updateOwnLogo']);
+    Route::post('/company/fcm-token', [DeviceTokenController::class, 'storeCompany']);
 
     Route::get('/company/products', [ProductDetailController::class, 'myCompanyProducts']);
     Route::get('/company/my-products', [ProductDetailController::class, 'myCompanyProducts']);
@@ -190,6 +191,7 @@ Route::middleware([
     CheckUserType::class . ':store',
 ])->group(function () {
     Route::get('/store/companies', [CompanyController::class, 'browse']);
+    Route::post('/store/fcm-token', [DeviceTokenController::class, 'storeStore']);
 
     Route::post('/store/orders', [OrderController::class, 'store']);
 

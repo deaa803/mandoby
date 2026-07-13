@@ -1,0 +1,16 @@
+app/Filament/Resources/Advertisements/Tables/AdvertisementsTable.php
+app/Filament/Resources/Categories/Tables/CategoriesTable.php
+app/Filament/Resources/Companies/Tables/CompaniesTable.php
+app/Filament/Resources/CompanyCars/Tables/CompanyCarsTable.php
+app/Filament/Resources/CompanySubscriptions/CompanySubscriptionResource.php
+app/Filament/Resources/Drivers/Tables/DriversTable.php
+app/Filament/Resources/Features/Tables/FeaturesTable.php
+app/Filament/Resources/Orders/Tables/OrdersTable.php
+app/Filament/Resources/Payments/Tables/PaymentsTable.php
+app/Filament/Resources/Product3DModels/Tables/Product3DModelsTable.php
+app/Filament/Resources/ProductDetails/Tables/ProductDetailsTable.php
+app/Filament/Resources/Products/Tables/ProductsTable.php
+app/Filament/Resources/ShippingOffices/Tables/ShippingOfficesTable.php
+app/Filament/Resources/Stores/Tables/StoresTable.php
+app/Filament/Resources/SubscriptionFeatures/SubscriptionFeatureResource.php
+app/Filament/Resources/SubscriptionPlans/SubscriptionPlanResource.php

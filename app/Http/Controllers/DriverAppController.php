@@ -277,8 +277,8 @@ class DriverAppController extends Controller
                 continue;
             }
 
-            $title = 'تم تسليم الطلب';
-            $body = "قام السائق {$user->name} بتسليم الطلب رقم {$order->id}";
+            $title = 'تم تسليم الشحنة';
+            $body = "قام السائق {$user->name} بتسليم الشحنة بنجاح";
             $data = [
                 'type' => 'order_delivered',
                 'order_id' => (string) $order->id,
@@ -317,8 +317,8 @@ class DriverAppController extends Controller
         if ($order->store?->user_id) {
             $storeNotification = $notifications->create(
                 userId: $order->store->user_id,
-                title: 'تم تسليم الطلب',
-                body: "تم تسليم طلبك رقم {$order->id} بنجاح",
+                title: 'تم تسليم الشحنة',
+                body: 'تم تسليم شحنتك بنجاح',
                 type: 'store_order_delivered',
                 orderId: $order->id,
                 data: [

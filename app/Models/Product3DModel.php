@@ -24,6 +24,7 @@ class Product3DModel extends Model
         'metadata',
         'generated_at',
         'started_at',
+        'completed_notification_sent_at',
     ];
 
     protected $appends = [
@@ -39,6 +40,7 @@ class Product3DModel extends Model
             'metadata' => 'array',
             'generated_at' => 'datetime',
             'started_at' => 'datetime',
+            'completed_notification_sent_at' => 'datetime',
         ];
     }
 

@@ -48,7 +48,7 @@ class CheckCompanySubscriptions extends Command
                     notifications: $notifications,
                     firebase: $firebase,
                     title: 'قرب انتهاء الاشتراك',
-                    body: "اشتراك {$subscription->plan?->name} سينتهي بعد {$daysRemaining} يوم.",
+                    body: "اشتراك {$subscription->plan?->name} أوشك على الانتهاء، يرجى مراجعته داخل التطبيق.",
                     type: 'subscription_expiring_7_days',
                 );
 
@@ -61,7 +61,7 @@ class CheckCompanySubscriptions extends Command
                     notifications: $notifications,
                     firebase: $firebase,
                     title: 'تنبيه اشتراك',
-                    body: "تبقى {$daysRemaining} يوم على انتهاء اشتراك {$subscription->plan?->name}.",
+                    body: "اشتراك {$subscription->plan?->name} قريب جدًا من الانتهاء، يرجى تجديده.",
                     type: 'subscription_expiring_3_days',
                 );
 

@@ -41,7 +41,7 @@ class OrderCompanyNotificationService
 
             try {
                 $title = 'طلب جديد';
-                $body = "وصلك طلب جديد رقم {$order->id}";
+                $body = "وصلك طلب جديد، يرجى مراجعة التفاصيل داخل التطبيق";
                 $data = [
                     'type' => 'new_order',
                     'order_id' => (string) $order->id,

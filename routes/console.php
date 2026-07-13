@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('subscriptions:check-expiry')->dailyAt('09:00');
+
+Schedule::command('orders:check-eta')->everyMinute()->withoutOverlapping();

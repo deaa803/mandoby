@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Product3DModel;
+use App\Services\Product3DModelNotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -41,7 +42,7 @@ class GenerateProduct3DModelJob implements ShouldQueue
     ) {
     }
 
-    public function handle(): void
+    public function handle(Product3DModelNotificationService $notifier): void
     {
         $model = Product3DModel::find($this->product3DModelId);
 
@@ -180,6 +181,8 @@ class GenerateProduct3DModelJob implements ShouldQueue
                 'generated_at' => now(),
                 'error_message' => null,
             ]);
+
+            $notifier->notifyCompleted($model->fresh());
         } catch (Throwable $exception) {
             $model->update([
                 'status' => 'failed',

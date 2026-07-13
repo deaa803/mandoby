@@ -524,8 +524,8 @@ class OrderController extends Controller
 
         $driverNotification = $notifications->create(
             userId: $driver->user_id,
-            title: 'طلب توصيل جديد',
-            body: 'تم إسناد طلب جديد إليك',
+            title: 'شحنة توصيل جديدة',
+            body: 'تم إسناد شحنة جديدة إليك، يرجى مراجعة التفاصيل داخل التطبيق',
             type: 'driver_assigned_order',
             orderId: $order->id,
             data: [
@@ -554,8 +554,8 @@ class OrderController extends Controller
         if ($order->store?->user_id) {
             $storeNotification = $notifications->create(
                 userId: $order->store->user_id,
-                title: 'تم إسناد سائق للطلب',
-                body: "تم إسناد السائق {$driver->user?->name} للطلب رقم {$order->id}",
+                title: 'تم إسناد سائق للشحنة',
+                body: "تم إسناد السائق {$driver->user?->name} للشحنة، يمكنك متابعة التفاصيل داخل التطبيق",
                 type: 'driver_assigned_to_order',
                 orderId: $order->id,
                 data: [

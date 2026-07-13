@@ -189,50 +189,6 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function storeInstallments(Request $request)
-    {
-        $store = $request->user()?->store;
-
-        if (!$store) {
-            return $this->notFound('Store account not found');
-        }
-
-        $orders = Order::with($this->orderRelations)
-            ->where('store_id', $store->id)
-            ->where('remaining_amount', '>', 0)
-            ->latest()
-            ->get();
-
-        return $this->installmentsResponse(
-            orders: $orders,
-            message: 'Store installments retrieved successfully',
-            titlePrefix: 'قسط طلب',
-        );
-    }
-
-    public function companyInstallments(Request $request)
-    {
-        $company = $request->user()?->company;
-
-        if (!$company) {
-            return $this->notFound('Company account not found');
-        }
-
-        $orders = Order::with($this->orderRelations)
-            ->whereHas('productDetails', function ($query) use ($company) {
-                $query->where('product_details.company_id', $company->id);
-            })
-            ->where('remaining_amount', '>', 0)
-            ->latest()
-            ->get();
-
-        return $this->installmentsResponse(
-            orders: $orders,
-            message: 'Company installments retrieved successfully',
-            titlePrefix: 'مستحقات الطلب',
-        );
-    }
-
     private function createPayment(
         int $orderId,
         float $amount,
@@ -280,45 +236,6 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             return $this->serverError('Failed to create payment', $e);
         }
-    }
-
-    private function installmentsResponse($orders, string $message, string $titlePrefix)
-    {
-        $installments = $orders->map(function (Order $order) use ($titlePrefix) {
-            return [
-                'id' => $order->id,
-                'order_id' => $order->id,
-                'title' => "{$titlePrefix} #{$order->id}",
-                'status' => 'مستحقة',
-                'amount' => (float) $order->remaining_amount,
-                'paid_amount' => (float) $order->paid_amount,
-                'remaining_amount' => (float) $order->remaining_amount,
-                'total_price' => (float) $order->total_price,
-                'due_date' => $order->date?->copy()->addMonth()->toDateString(),
-                'order' => $order,
-            ];
-        })->values();
-
-        $payments = $orders
-            ->flatMap(fn (Order $order) => $order->payments)
-            ->sortByDesc('paid_at')
-            ->values();
-
-        return response()->json([
-            'status' => true,
-            'message' => $message,
-            'data' => [
-                'summary' => [
-                    'total_orders' => $orders->count(),
-                    'total_price' => (float) $orders->sum('total_price'),
-                    'total_paid' => (float) $orders->sum('paid_amount'),
-                    'total_remaining' => (float) $orders->sum('remaining_amount'),
-                ],
-                'installments' => $installments,
-                'payments' => $payments,
-                'orders' => $orders,
-            ],
-        ]);
     }
 
     private function syncOrderPaymentAmounts(Order $order): void

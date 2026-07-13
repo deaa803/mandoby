@@ -162,7 +162,6 @@ Route::middleware([
     Route::get('/company/receivables', [OrderController::class, 'companyReceivables']);
     Route::get('/company/payments', [PaymentController::class, 'companyPayments']);
     Route::post('/company/payments', [PaymentController::class, 'store']);
-    Route::get('/company/installments', [PaymentController::class, 'companyInstallments']);
 
     Route::post(
         '/company/orders/{order}/assign-driver',
@@ -206,7 +205,6 @@ Route::middleware([
     Route::get('/store/my-debts', [OrderController::class, 'myDebts']);
 
     Route::get('/store/payments', [PaymentController::class, 'storePayments']);
-    Route::get('/store/installments', [PaymentController::class, 'storeInstallments']);
 });
 /*
 |--------------------------------------------------------------------------

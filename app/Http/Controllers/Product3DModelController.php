@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\GenerateProduct3DModelJob;
 use App\Models\Product3DModel;
 use App\Models\ProductDetail;
+use App\Services\Product3DModelNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -296,7 +297,8 @@ class Product3DModelController extends Controller
 
     public function update(
         Request $request,
-        Product3DModel $model3d
+        Product3DModel $model3d,
+        Product3DModelNotificationService $notifier,
     ) {
         if (
             !$this->belongsToAuthenticatedCompany(
@@ -429,6 +431,7 @@ class Product3DModelController extends Controller
         }
 
         $model3d->update($validated);
+        $notifier->notifyCompleted($model3d->fresh());
 
         return response()->json([
             'status' => true,

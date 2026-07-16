@@ -16,10 +16,40 @@ class MarketplaceTaxonomySeeder extends Seeder
      */
     public function run(): void
     {
+        $this->removeExcludedFeatures();
         $this->seedCategories();
         $this->seedFeatures();
 
         $this->command?->info('Marketplace categories and features seeded successfully.');
+    }
+
+    /**
+     * Remove features explicitly excluded by the project owner.
+     *
+     * Deleting a feature also removes its linked product-detail values through
+     * the existing database cascade on feature_product_details.feature_id.
+     */
+    private function removeExcludedFeatures(): void
+    {
+        Feature::query()
+            ->whereIn('name', [
+                'اللون',
+                'درجة اللون',
+                'الباركود',
+                'نوع الأداة الموسيقية',
+                'نوع الترخيص الرقمي',
+                'نوع الشعر',
+                'نوع التغليف',
+                'مدة التخزين',
+                'نوع الغلاف',
+                'نوع الفن',
+                'نوع الفن أو الهواية',
+                'رقم الموديل',
+                'المادة',
+                'الخامة الفنية',
+                'عدد السرعات',
+            ])
+            ->delete();
     }
 
     private function seedCategories(): void
@@ -61,19 +91,14 @@ class MarketplaceTaxonomySeeder extends Seeder
             'العلامة التجارية',
             'اسم الشركة المصنعة',
             'بلد المنشأ',
-            'رقم الموديل',
-            'الباركود',
             'النوع',
             'حالة المنتج',
-            'اللون',
             'المقاس',
-            'المادة',
             'الوزن',
             'الأبعاد',
             'السعة',
             'الكمية داخل العبوة',
             'محتويات العبوة',
-            'نوع التغليف',
             'الضمان',
             'مدة الضمان',
             'تعليمات الاستخدام',
@@ -88,13 +113,10 @@ class MarketplaceTaxonomySeeder extends Seeder
             'مستوى الاستخدام',
             'الحمولة القصوى',
             'مقاس العجلة',
-            'عدد السرعات',
             'مقاومة الماء',
 
             // Personal care and beauty.
             'نوع البشرة',
-            'نوع الشعر',
-            'درجة اللون',
             'الرائحة',
             'المكونات',
             'طريقة الاستخدام',
@@ -106,11 +128,9 @@ class MarketplaceTaxonomySeeder extends Seeder
             'الناشر',
             'اللغة',
             'عدد الصفحات',
-            'نوع الغلاف',
             'سنة النشر',
             'رقم ISBN',
             'صيغة المحتوى',
-            'نوع الترخيص الرقمي',
 
             // Industrial tools and electronics.
             'مصدر الطاقة',
@@ -136,11 +156,8 @@ class MarketplaceTaxonomySeeder extends Seeder
             'عضوي',
 
             // Hobbies, arts and music.
-            'نوع الفن أو الهواية',
             'مستوى المهارة',
-            'نوع الأداة الموسيقية',
             'عدد القطع',
-            'الخامة الفنية',
 
             // Services.
             'نوع الخدمة',

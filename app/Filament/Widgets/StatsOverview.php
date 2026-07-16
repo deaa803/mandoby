@@ -4,7 +4,9 @@ namespace App\Filament\Widgets;
 
 use App\Models\Company;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Store;
+use App\Services\PlatformProfitService;
 use Carbon\Carbon;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
@@ -37,17 +39,16 @@ class StatsOverview extends StatsOverviewWidget
             ->where('status', 'delivered')
             ->count();
 
-        $platformProfit = (float) (clone $ordersQuery)->sum('commission');
+        $paidAmount = (float) $this->validPaymentsQuery()->sum('amount');
+        $platformProfit = app(PlatformProfitService::class)
+            ->calculateFromPaidAmount($paidAmount);
 
         $companiesGrowth = $this->calculateMonthlyGrowth(Company::query());
         $storesGrowth = $this->calculateMonthlyGrowth(Store::query());
         $deliveredGrowth = $this->calculateMonthlyGrowth(
             Order::query()->where('status', 'delivered')
         );
-        $profitGrowth = $this->calculateMonthlySumGrowth(
-            Order::query()->where('status', '!=', 'cancelled'),
-            'commission'
-        );
+        $profitGrowth = $this->calculateMonthlyPaymentProfitGrowth();
 
         return [
             Stat::make('الشركات المسجلة', number_format($companiesCount))
@@ -71,11 +72,11 @@ class StatsOverview extends StatsOverviewWidget
                 ->descriptionIcon($deliveredGrowth >= 0 ? Heroicon::ArrowTrendingUp : Heroicon::ArrowTrendingDown)
                 ->icon(Heroicon::CheckCircle)
                 ->chart($this->getDailyDeliveredTrend())
-                ->color($deliveredGrowth >= 0 ? 'warning' : 'danger')
-                ->extraAttributes(['class' => 'platform-stat platform-stat--amber']),
+                ->color($deliveredGrowth >= 0 ? 'success' : 'danger')
+                ->extraAttributes(['class' => 'platform-stat platform-stat--gold']),
 
             Stat::make(
-                'أرباح المنصة',
+                'أرباح المنصة من الدفعات',
                 number_format($platformProfit, 2) . ' ' . config('app.currency', 'SYP')
             )
                 ->description($this->growthDescription($profitGrowth))
@@ -107,18 +108,22 @@ class StatsOverview extends StatsOverviewWidget
         return round((($current - $previous) / $previous) * 100, 1);
     }
 
-    protected function calculateMonthlySumGrowth(Builder $query, string $column): float
+    protected function calculateMonthlyPaymentProfitGrowth(): float
     {
-        $current = (float) (clone $query)
-            ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
-            ->sum($column);
+        $service = app(PlatformProfitService::class);
 
-        $previous = (float) (clone $query)
-            ->whereBetween('created_at', [
-                now()->subMonthNoOverflow()->startOfMonth(),
-                now()->subMonthNoOverflow()->endOfMonth(),
-            ])
-            ->sum($column);
+        $currentPaid = (float) $this->paymentsWithin(
+            now()->startOfMonth(),
+            now()->endOfMonth(),
+        )->sum('amount');
+
+        $previousPaid = (float) $this->paymentsWithin(
+            now()->subMonthNoOverflow()->startOfMonth(),
+            now()->subMonthNoOverflow()->endOfMonth(),
+        )->sum('amount');
+
+        $current = $service->calculateFromPaidAmount($currentPaid);
+        $previous = $service->calculateFromPaidAmount($previousPaid);
 
         if ($previous <= 0) {
             return $current > 0 ? 100 : 0;
@@ -167,15 +172,37 @@ class StatsOverview extends StatsOverviewWidget
 
     protected function getDailyProfitTrend(): array
     {
-        return Order::query()
-            ->where('status', '!=', 'cancelled')
-            ->where('created_at', '>=', Carbon::now()->subDays(6)->startOfDay())
-            ->selectRaw('DATE(created_at) as day, COALESCE(SUM(commission), 0) as total')
-            ->groupByRaw('DATE(created_at)')
+        $rate = app(PlatformProfitService::class)->rate();
+
+        return $this->paymentsWithin(
+            Carbon::now()->subDays(6)->startOfDay(),
+            Carbon::now()->endOfDay(),
+        )
+            ->selectRaw('DATE(COALESCE(paid_at, created_at)) as day')
+            ->selectRaw('ROUND(COALESCE(SUM(amount), 0) * ?, 2) as total', [$rate])
+            ->groupByRaw('DATE(COALESCE(paid_at, created_at))')
             ->orderBy('day')
             ->pluck('total')
             ->map(fn ($value): float => (float) $value)
             ->values()
             ->toArray();
+    }
+
+    protected function validPaymentsQuery(): Builder
+    {
+        return Payment::query()
+            ->whereHas('order', fn (Builder $query) => $query->where('status', '!=', 'cancelled'));
+    }
+
+    protected function paymentsWithin(Carbon $start, Carbon $end): Builder
+    {
+        return $this->validPaymentsQuery()
+            ->where(function (Builder $query) use ($start, $end): void {
+                $query->whereBetween('paid_at', [$start, $end])
+                    ->orWhere(function (Builder $query) use ($start, $end): void {
+                        $query->whereNull('paid_at')
+                            ->whereBetween('created_at', [$start, $end]);
+                    });
+            });
     }
 }

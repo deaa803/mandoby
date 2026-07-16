@@ -42,6 +42,10 @@ class Order extends Model
         'extra_delivery_fee' => 'decimal:2',
         'delivery_qr_used_at' => 'datetime',
         'delivered_at' => 'datetime',
+        'total_price' => 'decimal:2',
+        'commission' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
+        'remaining_amount' => 'decimal:2',
     ];
 
     public function store(): \Illuminate\Database\Eloquent\Relations\BelongsTo

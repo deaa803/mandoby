@@ -1,40 +1,97 @@
 <x-filament-widgets::widget>
-    <x-filament::section class="profit-widget">
-        <x-slot name="heading">أرباح المنصة حسب الشركة</x-slot>
-        <x-slot name="description">أعلى الشركات مساهمة في عمولة المنصة</x-slot>
+    <x-filament::section>
+        <x-slot name="heading">
+            {{ $isArabic ? 'أرباح المنصة حسب الشركة' : 'Platform profit by company' }}
+        </x-slot>
+        <x-slot name="description">
+            عمولة المنصة المحققة من الدفعات الفعلية لكل شركة بنسبة {{ number_format((float) $commissionPercentage, 2) }}٪، مع استبعاد الطلبات الملغاة.
+        </x-slot>
 
-        <div class="profit-list" dir="rtl">
+        <div class="space-y-3" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
             @forelse ($companies as $index => $company)
-                @php($percent = min(100, ((float) $company->platform_profit / $maxProfit) * 100))
-                <a href="{{ $company->admin_url }}" class="profit-row">
-                    <span class="profit-rank">{{ $index + 1 }}</span>
-                    <span class="profit-avatar">
+                <div class="company-profit-row">
+                    <div class="company-profit-rank">{{ $index + 1 }}</div>
+
+                    <div class="company-profit-avatar">
                         @if ($company->logo)
-                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($company->logo) }}" alt="">
+                            <img src="{{ \Illuminate\Support\Facades\Storage::url($company->logo) }}" alt="{{ $company->name_company }}">
                         @else
-                            {{ mb_substr($company->name_company, 0, 1) }}
+                            <span>{{ mb_substr($company->name_company ?: '?', 0, 1) }}</span>
                         @endif
-                    </span>
-                    <span class="profit-copy">
+                    </div>
+
+                    <div class="company-profit-info">
                         <strong>{{ $company->name_company }}</strong>
-                        <small>{{ number_format($company->orders_count) }} طلبات</small>
-                        <i><b style="width: {{ $percent }}%"></b></i>
-                    </span>
-                    <span class="profit-value">{{ number_format($company->platform_profit, 2) }}<small>{{ $currency }}</small></span>
-                </a>
+                        <small>
+                            {{ number_format((int) $company->orders_count) }}
+                            طلب مدفوع
+                        </small>
+                        <small>
+                            إجمالي الدفعات: {{ number_format((float) $company->paid_total, 2) }} {{ $currency }}
+                        </small>
+                    </div>
+
+                    <div class="company-profit-value">
+                        <strong>{{ number_format((float) $company->platform_profit, 2) }}</strong>
+                        <small>{{ $currency }}</small>
+                    </div>
+                </div>
             @empty
-                <div class="profit-empty">لا توجد بيانات أرباح بعد.</div>
+                <div class="company-profit-empty">
+                    لا توجد دفعات مسجلة حتى الآن.
+                </div>
             @endforelse
         </div>
-    </x-filament::section>
 
-    <style>
-        .profit-list{display:flex;flex-direction:column;gap:.55rem;max-height:320px;overflow:auto;padding-inline-end:.2rem}
-        .profit-row{display:grid;grid-template-columns:2rem 2.6rem minmax(0,1fr) auto;align-items:center;gap:.7rem;padding:.72rem;border:1px solid var(--md-border);border-radius:1rem;background:color-mix(in srgb,var(--md-card-solid) 76%,transparent);transition:.18s ease}
-        .profit-row:hover{transform:translateX(-3px);border-color:rgba(212,168,23,.45);background:color-mix(in srgb,var(--md-gold) 6%,var(--md-card-solid))}
-        .profit-rank{display:grid;place-items:center;width:1.7rem;height:1.7rem;border-radius:.55rem;color:#8a6500;background:var(--md-gold-soft);font-size:.72rem;font-weight:900}
-        .profit-avatar{display:grid;place-items:center;width:2.5rem;height:2.5rem;border-radius:.8rem;overflow:hidden;color:#8a6500;background:var(--md-gold-soft);font-weight:900}.profit-avatar img{width:100%;height:100%;object-fit:cover}
-        .profit-copy{min-width:0}.profit-copy strong{display:block;color:var(--md-text);font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.profit-copy small{display:block;margin-top:.12rem;color:var(--md-muted);font-size:.68rem}.profit-copy i{display:block;height:3px;margin-top:.42rem;border-radius:999px;background:color-mix(in srgb,var(--md-border) 85%,transparent);overflow:hidden}.profit-copy i b{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#f0cf55,var(--md-gold))}
-        .profit-value{text-align:left;color:var(--md-gold);font-size:.8rem;font-weight:900;white-space:nowrap}.profit-value small{display:block;color:var(--md-muted);font-size:.58rem;font-weight:700}.profit-empty{padding:2rem;text-align:center;color:var(--md-muted)}
-    </style>
+        <style>
+            .company-profit-row {
+                display: grid;
+                grid-template-columns: 1.8rem 2.65rem minmax(0, 1fr) auto;
+                align-items: center;
+                gap: .7rem;
+                padding: .7rem;
+                border: 1px solid var(--supplier-border, rgba(15,23,42,.08));
+                border-radius: .9rem;
+                background: color-mix(in srgb, var(--supplier-card, #fff) 94%, var(--supplier-gold, #d5b22f) 6%);
+            }
+            .company-profit-rank {
+                display: grid;
+                place-items: center;
+                width: 1.55rem;
+                height: 1.55rem;
+                border-radius: 999px;
+                color: #6d5400;
+                background: rgba(213,178,47,.2);
+                font-size: .72rem;
+                font-weight: 900;
+            }
+            .company-profit-avatar {
+                display: grid;
+                place-items: center;
+                width: 2.55rem;
+                height: 2.55rem;
+                overflow: hidden;
+                border-radius: .72rem;
+                color: #111827;
+                background: linear-gradient(135deg, #f2df86, #d5b22f);
+                font-weight: 900;
+            }
+            .company-profit-avatar img { width: 100%; height: 100%; object-fit: cover; }
+            .company-profit-info { min-width: 0; }
+            .company-profit-info strong {
+                display: block;
+                overflow: hidden;
+                color: var(--supplier-text, #111827);
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                font-size: .85rem;
+            }
+            .company-profit-info small,
+            .company-profit-value small { color: var(--supplier-muted, #7c7f86); font-size: .7rem; }
+            .company-profit-value { text-align: end; }
+            .company-profit-value strong { display: block; color: #b18a0d; font-size: .88rem; }
+            .dark .company-profit-value strong { color: #e2c95c; }
+            .company-profit-empty { padding: 2rem 1rem; text-align: center; color: var(--supplier-muted, #7c7f86); }
+        </style>
+    </x-filament::section>
 </x-filament-widgets::widget>

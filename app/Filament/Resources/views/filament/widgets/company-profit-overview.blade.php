@@ -4,7 +4,7 @@
             {{ $isArabic ? 'أرباح المنصة حسب الشركة' : 'Platform profit by company' }}
         </x-slot>
         <x-slot name="description">
-            {{ $isArabic ? 'العمولة المتوقعة من كل شركة، باستثناء الطلبات الملغاة.' : 'Expected commission from each company, excluding cancelled orders.' }}
+            عمولة المنصة المحققة من الدفعات الفعلية لكل شركة بنسبة {{ number_format((float) $commissionPercentage, 2) }}٪، مع استبعاد الطلبات الملغاة.
         </x-slot>
 
         <div class="space-y-3" dir="{{ $isArabic ? 'rtl' : 'ltr' }}">
@@ -24,7 +24,10 @@
                         <strong>{{ $company->name_company }}</strong>
                         <small>
                             {{ number_format((int) $company->orders_count) }}
-                            {{ $isArabic ? 'طلب' : 'orders' }}
+                            طلب مدفوع
+                        </small>
+                        <small>
+                            إجمالي الدفعات: {{ number_format((float) $company->paid_total, 2) }} {{ $currency }}
                         </small>
                     </div>
 
@@ -35,7 +38,7 @@
                 </div>
             @empty
                 <div class="company-profit-empty">
-                    {{ $isArabic ? 'لا توجد أرباح مسجلة حتى الآن.' : 'No recorded profit yet.' }}
+                    لا توجد دفعات مسجلة حتى الآن.
                 </div>
             @endforelse
         </div>

@@ -43,7 +43,7 @@ class OrdersTable
                     })
                     ->label('الحالة'),
                 TextColumn::make('driver.user.name')->label('السائق')->searchable()->placeholder('-'),
-                TextColumn::make('commission')->numeric(decimalPlaces: 2)->label('العمولة')->sortable(),
+                TextColumn::make('commission')->numeric(decimalPlaces: 2)->label('عمولة المنصة من الدفعات')->sortable(),
                 TextColumn::make('created_at')->dateTime()->label('تاريخ الإنشاء')->toggleable(isToggledHiddenByDefault: true)->sortable(),
             ])
             ->filters([
@@ -57,16 +57,25 @@ class OrdersTable
                     ])
                     ->label('الحالة'),
             ])
-            ->recordActions([ViewAction::make(), EditAction::make(),
+            ->recordActions([
+                ViewAction::make()
+                    ->label('عرض')
+                    ->icon('heroicon-o-eye'),
+
+                EditAction::make()
+                    ->label('تعديل')
+                    ->icon('heroicon-o-pencil-square'),
+
                 DeleteAction::make()
-                                    ->label('حذف')
-                                    ->icon('heroicon-o-trash')
-                                    ->color('danger')
-                                    ->modalHeading('تأكيد حذف السجل')
-                                    ->modalDescription('هل أنت متأكد من حذف هذا السجل؟ قد يؤدي الحذف إلى إزالة البيانات المرتبطة به حسب علاقات قاعدة البيانات، ولا يمكن التراجع عن العملية.')
-                                    ->modalSubmitActionLabel('نعم، احذف')
-                                    ->modalCancelActionLabel('إلغاء')
-                                    ->successNotificationTitle('تم حذف السجل بنجاح'),
+                    ->label('حذف')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('تأكيد الحذف')
+                    ->modalDescription('هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن العملية بعد تنفيذها.')
+                    ->modalSubmitActionLabel('نعم، احذف')
+                    ->modalCancelActionLabel('إلغاء')
+                    ->successNotificationTitle('تم حذف السجل بنجاح'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([DeleteBulkAction::make()]),

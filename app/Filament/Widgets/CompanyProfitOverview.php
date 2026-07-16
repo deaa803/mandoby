@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Resources\Companies\CompanyResource;
 use App\Models\Company;
+use App\Services\PlatformProfitService;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\DB;
 
@@ -21,19 +22,41 @@ class CompanyProfitOverview extends Widget
 
     protected function getViewData(): array
     {
-        $orderCompanyPairs = DB::table('orders as o')
-            ->join('order_product_detail as opd', 'opd.order_id', '=', 'o.id')
+        $commissionRate = app(PlatformProfitService::class)->rate();
+
+        /*
+         * كل طلب في النظام يعود إلى شركة واحدة من خلال منتجات الطلب.
+         * نستخدم distinct حتى لا تتكرر الدفعة إذا احتوى الطلب على عدة منتجات.
+         */
+        $orderCompanyPairs = DB::table('order_product_detail as opd')
             ->join('product_details as pd', 'pd.id', '=', 'opd.product_detail_id')
-            ->where('o.status', '!=', 'cancelled')
-            ->select(['pd.company_id', 'o.id as order_id', 'o.commission'])
+            ->select([
+                'pd.company_id',
+                'opd.order_id',
+            ])
             ->distinct();
 
-        $profitTotals = DB::query()
-            ->fromSub($orderCompanyPairs, 'company_orders')
-            ->select('company_id')
-            ->selectRaw('COUNT(order_id) as orders_count')
-            ->selectRaw('COALESCE(SUM(commission), 0) as platform_profit')
-            ->groupBy('company_id');
+        /*
+         * الربح الفعلي للمنصة = مجموع دفعات طلبات الشركة × نسبة العمولة.
+         */
+        $profitTotals = DB::table('payments as p')
+            ->joinSub(
+                $orderCompanyPairs,
+                'order_companies',
+                'order_companies.order_id',
+                '=',
+                'p.order_id'
+            )
+            ->join('orders as o', 'o.id', '=', 'p.order_id')
+            ->where('o.status', '!=', 'cancelled')
+            ->select('order_companies.company_id')
+            ->selectRaw('COUNT(DISTINCT p.order_id) as orders_count')
+            ->selectRaw('COALESCE(SUM(p.amount), 0) as paid_total')
+            ->selectRaw(
+                'ROUND(COALESCE(SUM(p.amount), 0) * ?, 2) as platform_profit',
+                [$commissionRate]
+            )
+            ->groupBy('order_companies.company_id');
 
         $companies = Company::query()
             ->leftJoinSub(
@@ -43,24 +66,32 @@ class CompanyProfitOverview extends Widget
                 '=',
                 'companies.id'
             )
-            ->select(['companies.id', 'companies.name_company', 'companies.logo'])
+            ->select([
+                'companies.id',
+                'companies.name_company',
+                'companies.logo',
+            ])
             ->selectRaw('COALESCE(company_profit_totals.orders_count, 0) as orders_count')
+            ->selectRaw('COALESCE(company_profit_totals.paid_total, 0) as paid_total')
             ->selectRaw('COALESCE(company_profit_totals.platform_profit, 0) as platform_profit')
             ->orderByDesc('platform_profit')
             ->orderBy('companies.name_company')
             ->limit(8)
             ->get()
             ->map(function ($company) {
-                $company->admin_url = CompanyResource::getUrl('view', ['record' => $company->id]);
+                $company->admin_url = CompanyResource::getUrl('view', [
+                    'record' => $company->id,
+                ]);
+
                 return $company;
             });
 
-        $maxProfit = max(1, (float) $companies->max('platform_profit'));
-
         return [
             'companies' => $companies,
-            'maxProfit' => $maxProfit,
+            'maxProfit' => max(1, (float) $companies->max('platform_profit')),
             'currency' => config('app.currency', 'SYP'),
+            'commissionPercentage' => $commissionRate * 100,
+            'isArabic' => true,
         ];
     }
 }

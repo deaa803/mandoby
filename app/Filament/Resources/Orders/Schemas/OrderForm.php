@@ -51,10 +51,11 @@ class OrderForm
 
                 TextInput::make('commission')
                     ->numeric()
-                    ->minValue(0)
                     ->default(0)
-                    ->required()
-                    ->label('العمولة'),
+                    ->disabled()
+                    ->dehydrated()
+                    ->helperText('تُحسب تلقائيًا بنسبة 2٪ من مجموع الدفعات الفعلية للطلب.')
+                    ->label('عمولة المنصة من الدفعات'),
 
                 TextInput::make('total_price')
                     ->numeric()

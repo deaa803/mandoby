@@ -4,12 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\PlatformProfitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
+    public function __construct(
+        private readonly PlatformProfitService $platformProfitService,
+    ) {
+    }
+
     private array $orderRelations = [
         'store.user',
         'driver.user',
@@ -240,12 +246,7 @@ class PaymentController extends Controller
 
     private function syncOrderPaymentAmounts(Order $order): void
     {
-        $paid = (float) $order->payments()->sum('amount');
-
-        $order->update([
-            'paid_amount' => $paid,
-            'remaining_amount' => max((float) $order->total_price - $paid, 0),
-        ]);
+        $this->platformProfitService->syncOrder($order);
     }
 
     private function notFound(string $message)

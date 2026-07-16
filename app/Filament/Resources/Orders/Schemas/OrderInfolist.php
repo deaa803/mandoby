@@ -19,7 +19,7 @@ class OrderInfolist
                 TextEntry::make('total_price')->numeric(decimalPlaces: 2)->label('الإجمالي'),
                 TextEntry::make('paid_amount')->numeric(decimalPlaces: 2)->label('المدفوع'),
                 TextEntry::make('remaining_amount')->numeric(decimalPlaces: 2)->label('المتبقي'),
-                TextEntry::make('commission')->numeric(decimalPlaces: 2)->label('العمولة'),
+                TextEntry::make('commission')->numeric(decimalPlaces: 2)->label('عمولة المنصة من الدفعات'),
                 TextEntry::make('created_at')->dateTime()->label('تاريخ الإنشاء'),
                 TextEntry::make('updated_at')->dateTime()->label('آخر تحديث'),
             ]);

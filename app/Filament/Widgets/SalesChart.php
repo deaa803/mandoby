@@ -3,8 +3,11 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Order;
+use App\Models\Payment;
+use App\Services\PlatformProfitService;
 use Carbon\Carbon;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 class SalesChart extends ChartWidget
@@ -21,7 +24,7 @@ class SalesChart extends ChartWidget
 
     protected ?string $pollingInterval = null;
 
-    protected ?string $heading = 'حركة الطلبات والأرباح';
+    protected ?string $heading = 'حركة الطلبات وأرباح الدفعات';
 
     protected ?string $description = 'مقارنة يومية خلال آخر 30 يومًا';
 
@@ -44,11 +47,20 @@ class SalesChart extends ChartWidget
             ->pluck('total', 'day')
             ->toArray();
 
-        $profits = Order::query()
-            ->where('status', '!=', 'cancelled')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw('DATE(created_at) as day, COALESCE(SUM(commission), 0) as total')
-            ->groupBy(DB::raw('DATE(created_at)'))
+        $rate = app(PlatformProfitService::class)->rate();
+
+        $profits = Payment::query()
+            ->whereHas('order', fn (Builder $query) => $query->where('status', '!=', 'cancelled'))
+            ->where(function (Builder $query) use ($startDate, $endDate): void {
+                $query->whereBetween('paid_at', [$startDate, $endDate])
+                    ->orWhere(function (Builder $query) use ($startDate, $endDate): void {
+                        $query->whereNull('paid_at')
+                            ->whereBetween('created_at', [$startDate, $endDate]);
+                    });
+            })
+            ->selectRaw('DATE(COALESCE(paid_at, created_at)) as day')
+            ->selectRaw('ROUND(COALESCE(SUM(amount), 0) * ?, 2) as total', [$rate])
+            ->groupBy(DB::raw('DATE(COALESCE(paid_at, created_at))'))
             ->pluck('total', 'day')
             ->toArray();
 
@@ -68,7 +80,7 @@ class SalesChart extends ChartWidget
                     'yAxisID' => 'y',
                 ],
                 [
-                    'label' => 'أرباح المنصة',
+                    'label' => 'أرباح المنصة من الدفعات',
                     'data' => $dates->map(fn (string $date): float => round((float) ($profits[$date] ?? 0), 2))->toArray(),
                     'borderColor' => '#d4a817',
                     'backgroundColor' => 'rgba(212, 168, 23, .10)',

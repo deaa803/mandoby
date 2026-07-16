@@ -4,7 +4,6 @@ namespace App\Filament\Widgets;
 
 use App\Models\Company;
 use App\Models\Order;
-use App\Models\Payment;
 use App\Models\Store;
 use App\Services\PlatformProfitService;
 use Carbon\Carbon;
@@ -32,23 +31,15 @@ class StatsOverview extends StatsOverviewWidget
     {
         $companiesCount = Company::query()->count();
         $storesCount = Store::query()->count();
+        $deliveredOrders = Order::query()->where('status', 'delivered')->count();
 
-        $ordersQuery = Order::query()->where('status', '!=', 'cancelled');
-
-        $deliveredOrders = (clone $ordersQuery)
-            ->where('status', 'delivered')
-            ->count();
-
-        $paidAmount = (float) $this->validPaymentsQuery()->sum('amount');
-        $platformProfit = app(PlatformProfitService::class)
-            ->calculateFromPaidAmount($paidAmount);
+        $financials = app(PlatformProfitService::class)->globalStatement();
 
         $companiesGrowth = $this->calculateMonthlyGrowth(Company::query());
         $storesGrowth = $this->calculateMonthlyGrowth(Store::query());
         $deliveredGrowth = $this->calculateMonthlyGrowth(
             Order::query()->where('status', 'delivered')
         );
-        $profitGrowth = $this->calculateMonthlyPaymentProfitGrowth();
 
         return [
             Stat::make('الشركات المسجلة', number_format($companiesCount))
@@ -76,14 +67,17 @@ class StatsOverview extends StatsOverviewWidget
                 ->extraAttributes(['class' => 'platform-stat platform-stat--gold']),
 
             Stat::make(
-                'أرباح المنصة من الدفعات',
-                number_format($platformProfit, 2) . ' ' . config('app.currency', 'SYP')
+                'المتبقي للمنصة',
+                number_format((float) $financials['remaining_amount'], 2)
+                    . ' ' . config('app.currency', 'SYP')
             )
-                ->description($this->growthDescription($profitGrowth))
-                ->descriptionIcon($profitGrowth >= 0 ? Heroicon::ArrowTrendingUp : Heroicon::ArrowTrendingDown)
+                ->description(
+                    'المستحق: ' . number_format((float) $financials['accrued_commission'], 2)
+                    . ' — المقبوض: ' . number_format((float) $financials['confirmed_platform_payments'], 2)
+                )
+                ->descriptionIcon(Heroicon::ReceiptPercent)
                 ->icon(Heroicon::Banknotes)
-                ->chart($this->getDailyProfitTrend())
-                ->color($profitGrowth >= 0 ? 'success' : 'danger')
+                ->color((float) $financials['remaining_amount'] > 0 ? 'warning' : 'success')
                 ->extraAttributes(['class' => 'platform-stat platform-stat--violet']),
         ];
     }
@@ -102,30 +96,6 @@ class StatsOverview extends StatsOverviewWidget
             ->count();
 
         if ($previous === 0) {
-            return $current > 0 ? 100 : 0;
-        }
-
-        return round((($current - $previous) / $previous) * 100, 1);
-    }
-
-    protected function calculateMonthlyPaymentProfitGrowth(): float
-    {
-        $service = app(PlatformProfitService::class);
-
-        $currentPaid = (float) $this->paymentsWithin(
-            now()->startOfMonth(),
-            now()->endOfMonth(),
-        )->sum('amount');
-
-        $previousPaid = (float) $this->paymentsWithin(
-            now()->subMonthNoOverflow()->startOfMonth(),
-            now()->subMonthNoOverflow()->endOfMonth(),
-        )->sum('amount');
-
-        $current = $service->calculateFromPaidAmount($currentPaid);
-        $previous = $service->calculateFromPaidAmount($previousPaid);
-
-        if ($previous <= 0) {
             return $current > 0 ? 100 : 0;
         }
 
@@ -168,41 +138,5 @@ class StatsOverview extends StatsOverviewWidget
             ->map(fn ($value): int => (int) $value)
             ->values()
             ->toArray();
-    }
-
-    protected function getDailyProfitTrend(): array
-    {
-        $rate = app(PlatformProfitService::class)->rate();
-
-        return $this->paymentsWithin(
-            Carbon::now()->subDays(6)->startOfDay(),
-            Carbon::now()->endOfDay(),
-        )
-            ->selectRaw('DATE(COALESCE(paid_at, created_at)) as day')
-            ->selectRaw('ROUND(COALESCE(SUM(amount), 0) * ?, 2) as total', [$rate])
-            ->groupByRaw('DATE(COALESCE(paid_at, created_at))')
-            ->orderBy('day')
-            ->pluck('total')
-            ->map(fn ($value): float => (float) $value)
-            ->values()
-            ->toArray();
-    }
-
-    protected function validPaymentsQuery(): Builder
-    {
-        return Payment::query()
-            ->whereHas('order', fn (Builder $query) => $query->where('status', '!=', 'cancelled'));
-    }
-
-    protected function paymentsWithin(Carbon $start, Carbon $end): Builder
-    {
-        return $this->validPaymentsQuery()
-            ->where(function (Builder $query) use ($start, $end): void {
-                $query->whereBetween('paid_at', [$start, $end])
-                    ->orWhere(function (Builder $query) use ($start, $end): void {
-                        $query->whereNull('paid_at')
-                            ->whereBetween('created_at', [$start, $end]);
-                    });
-            });
     }
 }

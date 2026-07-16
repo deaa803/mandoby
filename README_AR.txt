@@ -1,36 +1,36 @@
-تعديل أرباح المنصة اعتمادًا على الدفعات الفعلية
+سيدر التصنيفات والميزات الكامل لمشروع Mandoby
+================================================
 
-القاعدة الجديدة:
-عمولة المنصة = مجموع دفعات الطلب × 2٪
+المحتويات:
+- database/seeders/DatabaseSeeder.php
+- database/seeders/MarketplaceTaxonomySeeder.php
+- database/seeders/ShopifyCompanyProductsSeeder.php (السيدر الموجود لديك بدون حذف)
 
-التعديل يعمل تلقائيًا عند:
-- إضافة دفعة من الـ API.
-- إضافة دفعة من لوحة Filament.
-- تعديل دفعة.
-- حذف دفعة.
-- نقل الدفعة من طلب إلى طلب آخر.
+ما تم إضافته:
+- الاحتفاظ بجميع التصنيفات القديمة.
+- إضافة التصنيفات الجديدة:
+  رياضة ولياقة بدنية
+  عناية شخصية وتجميل
+  كتب ومجلات
+  معدات وأدوات صناعية
+  أطعمة ومشروبات
+  هوايات وفنون
+  خدمات
+- إضافة مجموعة شاملة من ميزات المنتجات والخدمات.
+- استخدام updateOrCreate و firstOrCreate لمنع التكرار عند تشغيل السيدر أكثر من مرة.
+- عدم إيقاف db:seed إذا كان ملف Shopify CSV غير موجود؛ يتم تخطي استيراد المنتجات مع تحذير فقط.
 
-كما تم تعديل لوحة التحكم لتقرأ الأرباح مباشرة من جدول payments، وليس من قيمة ثابتة داخل الطلب.
+التركيب:
+1) فك الحزمة داخل جذر مشروع Laravel بجانب artisan.
+2) نفّذ:
 
-طريقة التركيب:
-1) خذ نسخة احتياطية:
-   Copy-Item app app_backup_before_payment_profit -Recurse -Force
-   Copy-Item resources resources_backup_before_payment_profit -Recurse -Force
+php artisan optimize:clear
+composer dump-autoload
+php artisan db:seed
 
-2) فك الضغط داخل جذر مشروع Laravel بجانب artisan:
-   Expand-Archive -Path ".\Mandoby_Payment_Profit_Fixed.zip" -DestinationPath "." -Force
+لتشغيل التصنيفات والميزات وحدها:
 
-3) نظف الكاش:
-   php artisan optimize:clear
-   composer dump-autoload
+php artisan db:seed --class=MarketplaceTaxonomySeeder
 
-4) حدث الطلبات القديمة من الدفعات الموجودة:
-   php artisan payments:sync-profits
-
-5) أعد تشغيل السيرفر:
-   php artisan serve --host=0.0.0.0 --port=8000
-
-مهم:
-- نسبة العمولة الحالية 2٪.
-- لتغييرها لاحقًا عدّل COMMISSION_RATE داخل:
-  app/Services/PlatformProfitService.php
+ملاحظة مهمة:
+لا تستخدم migrate:fresh على قاعدة بيانات فيها معلومات حقيقية لأنه يحذف كل الجداول والبيانات.

@@ -20,6 +20,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PlatformCommissionController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductDetailController;
 use App\Http\Controllers\Product3DModelController;
@@ -162,6 +163,10 @@ Route::middleware([
     Route::get('/company/receivables', [OrderController::class, 'companyReceivables']);
     Route::get('/company/payments', [PaymentController::class, 'companyPayments']);
     Route::post('/company/payments', [PaymentController::class, 'store']);
+
+    Route::get('/company/platform-account', [PlatformCommissionController::class, 'account']);
+    Route::get('/company/platform-payments', [PlatformCommissionController::class, 'index']);
+    Route::post('/company/platform-payments', [PlatformCommissionController::class, 'store']);
 
     Route::post(
         '/company/orders/{order}/assign-driver',

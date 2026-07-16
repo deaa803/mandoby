@@ -84,6 +84,11 @@ class Company extends Model
         return $this->hasMany(CompanySubscription::class);
     }
 
+    public function platformCommissionPayments()
+    {
+        return $this->hasMany(PlatformCommissionPayment::class);
+    }
+
     public function currentSubscription()
     {
         return $this->hasOne(CompanySubscription::class)

@@ -4,15 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\ProductDetail;
+use App\Services\PlatformProfitService;
 use Illuminate\Http\Request;
 
 class CompanyDashboardController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, PlatformProfitService $platformProfitService)
     {
         $company = $request->user()?->company;
 
-        if (!$company) {
+        if (! $company) {
             return response()->json([
                 'status' => false,
                 'message' => 'Company account not found',
@@ -46,6 +47,7 @@ class CompanyDashboardController extends Controller
                 'total_sales' => (float) (clone $orders)->sum('total_price'),
                 'total_paid' => (float) (clone $orders)->sum('paid_amount'),
                 'total_remaining' => (float) (clone $orders)->sum('remaining_amount'),
+                'platform_account' => $platformProfitService->companyStatement($company, true),
                 'subscription' => $subscription,
                 'subscription_features' => $company->activeFeatureKeys(),
                 'can_use_3d_models' => $company->hasActiveFeature('3d_models'),

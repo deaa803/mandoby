@@ -79,6 +79,7 @@ class DriverAssignmentService
                 title: $driverNotification->title,
                 body: $driverNotification->body,
                 data: $driverNotification->data ?? [],
+                appType: 'driver',
             );
         }
 

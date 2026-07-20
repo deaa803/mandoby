@@ -100,6 +100,7 @@ class CheckOrderEta extends Command
                 title: $notification->title,
                 body: $notification->body,
                 data: $notification->data ?? [],
+                appType: 'driver',
             );
 
             return;

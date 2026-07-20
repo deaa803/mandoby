@@ -34,6 +34,7 @@ class TestPushController extends Controller
                 'order_id' => (string) $validated['order_id'],
                 'driver_id' => (string) $driver->id,
             ],
+            appType: 'driver',
         );
 
         return response()->json([

@@ -10,6 +10,14 @@ use Throwable;
 
 class FirebaseNotificationService
 {
+    private const DEFAULT_ANDROID_SOUND = 'raning';
+    private const DEFAULT_ANDROID_CHANNEL = 'main_notifications_v2';
+    private const DEFAULT_APNS_SOUND = 'raning.mp3';
+
+    private const DRIVER_ANDROID_SOUND = 'car';
+    private const DRIVER_ANDROID_CHANNEL = 'driver_orders_car_v2';
+    private const DRIVER_APNS_SOUND = 'default';
+
     private $messaging;
 
     public function __construct()
@@ -23,11 +31,28 @@ class FirebaseNotificationService
         string $token,
         string $title,
         string $body,
-        array $data = []
+        array $data = [],
+        ?string $appType = null
     ): array {
         try {
+            $settings = $this->notificationSettings($appType);
+
             $message = CloudMessage::withTarget('token', $token)
                 ->withNotification(Notification::create($title, $body))
+                ->withAndroidConfig([
+                    'priority' => 'high',
+                    'notification' => [
+                        'sound' => $settings['android_sound'],
+                        'channel_id' => $settings['android_channel'],
+                    ],
+                ])
+                ->withApnsConfig([
+                    'payload' => [
+                        'aps' => [
+                            'sound' => $settings['apns_sound'],
+                        ],
+                    ],
+                ])
                 ->withData($this->normalizeData($data));
 
             $this->messaging->send($message);
@@ -81,6 +106,7 @@ class FirebaseNotificationService
                 title: $title,
                 body: $body,
                 data: $data,
+                appType: $appType,
             );
 
             $successCount += $result['sent'];
@@ -91,6 +117,23 @@ class FirebaseNotificationService
             'success' => $successCount > 0,
             'sent' => $successCount,
             'failed' => $failedCount,
+        ];
+    }
+
+    private function notificationSettings(?string $appType): array
+    {
+        if ($appType === 'driver') {
+            return [
+                'android_sound' => self::DRIVER_ANDROID_SOUND,
+                'android_channel' => self::DRIVER_ANDROID_CHANNEL,
+                'apns_sound' => self::DRIVER_APNS_SOUND,
+            ];
+        }
+
+        return [
+            'android_sound' => self::DEFAULT_ANDROID_SOUND,
+            'android_channel' => self::DEFAULT_ANDROID_CHANNEL,
+            'apns_sound' => self::DEFAULT_APNS_SOUND,
         ];
     }
 

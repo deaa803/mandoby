@@ -29,12 +29,17 @@ class OrderForm
                 Select::make('driver_id')
                     ->relationship('driver', 'id')
                     ->getOptionLabelFromRecordUsing(
-                        fn (Model $record): string => ($record->user?->name ?? 'سائق') . ' - #' . $record->id,
+                        fn (Model $record): string => ($record->user?->name ?? 'سائق')
+                            . ' — ' . ($record->car?->vehicle_type ?? 'بدون سيارة')
+                            . ' — ' . number_format((float) ($record->car?->max_load_kg ?? 0), 0) . ' كغ',
                     )
                     ->searchable()
                     ->preload()
                     ->nullable()
-                    ->label('السائق'),
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->helperText('استخدم زر «اقتراح سائق ذكي» أو «اختيار سائق يدويًا» من جدول الطلبات.')
+                    ->label('السائق المعين'),
 
                 Select::make('status')
                     ->options([
@@ -56,6 +61,20 @@ class OrderForm
                     ->dehydrated()
                     ->helperText('تُحسب تلقائيًا بنسبة 2٪ من مجموع الدفعات الفعلية للطلب.')
                     ->label('عمولة المنصة من الدفعات'),
+
+                TextInput::make('total_weight_kg')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->suffix('كغ')
+                    ->label('وزن الطلب'),
+
+                TextInput::make('required_load_kg')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->suffix('كغ')
+                    ->label('الحمولة المطلوبة مع الأمان'),
 
                 TextInput::make('total_price')
                     ->numeric()

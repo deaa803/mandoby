@@ -28,7 +28,11 @@ class Order extends Model
         'delivered_at',
         'paid_amount',
         'remaining_amount',
-        'driver_id'
+        'driver_id',
+        'total_weight_kg',
+        'required_load_kg',
+        'driver_assignment_method',
+        'driver_assigned_at'
     ];
 
     protected $casts = [
@@ -46,6 +50,9 @@ class Order extends Model
         'commission' => 'decimal:2',
         'paid_amount' => 'decimal:2',
         'remaining_amount' => 'decimal:2',
+        'total_weight_kg' => 'decimal:3',
+        'required_load_kg' => 'decimal:3',
+        'driver_assigned_at' => 'datetime',
     ];
 
     public function store(): \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -57,7 +64,7 @@ class Order extends Model
     public function productDetails(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
         return $this->belongsToMany(ProductDetail::class, 'order_product_detail')
-            ->withPivot('discount', 'price', 'quantity')
+            ->withPivot('discount', 'price', 'quantity', 'package_weight_kg', 'line_weight_kg')
             ->withTimestamps();
     }
     public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany

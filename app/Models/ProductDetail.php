@@ -21,12 +21,14 @@ class ProductDetail extends Model
         'status',
         'price',
         'min_order_quantity',
+        'package_weight_kg',
     ];
 
 
     protected $casts = [
         'price' => 'decimal:2',
         'min_order_quantity' => 'integer',
+        'package_weight_kg' => 'decimal:3',
     ];
 
     public function product()
@@ -49,7 +51,7 @@ class ProductDetail extends Model
     public function orders()
     {
         return $this->belongsToMany(Order::class, 'order_product_detail')
-            ->withPivot('discount','price','quantity')
+            ->withPivot('discount', 'price', 'quantity', 'package_weight_kg', 'line_weight_kg')
             ->withTimestamps();
     }
     public function features()

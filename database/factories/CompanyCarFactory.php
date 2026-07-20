@@ -18,7 +18,9 @@ class CompanyCarFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'vehicle_type' => fake()->randomElement(['فان', 'بيك أب', 'شاحنة صغيرة']),
+            'plate_number' => fake()->unique()->bothify('CAR-####'),
+            'max_load_kg' => fake()->randomElement([500, 750, 1000, 1500, 2500, 5000]),
         ];
     }
 }

@@ -5,17 +5,17 @@ namespace App\Http\Controllers;
 use App\Models\Driver;
 use App\Models\Order;
 use App\Models\ProductDetail;
-use App\Services\FirebaseNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use App\Services\OrderCompanyNotificationService;
-use App\Services\AppNotificationService;
 use App\Services\EstimatedDeliveryService;
 use App\Services\DeliveryQrService;
 use App\Services\DeliveryConfirmationService;
 use App\Services\DeliveryFeeService;
+use App\Services\DriverAssignmentService;
+use App\Services\SmartDispatchService;
 
 class OrderController extends Controller
 {
@@ -255,7 +255,6 @@ class OrderController extends Controller
                 'sometimes',
                 'in:pending,preparing,delivering,delivered,cancelled',
             ],
-            'driver_id' => ['sometimes', 'nullable', 'exists:drivers,id'],
             'products' => ['sometimes', 'array', 'min:1'],
             'products.*.product_detail_id' => [
                 'required_with:products',
@@ -273,7 +272,7 @@ class OrderController extends Controller
         try {
             $updated = DB::transaction(function () use ($validated, $order, $deliveryFeeService) {
                 $orderData = collect($validated)
-                    ->only(['date', 'commission', 'status', 'driver_id'])
+                    ->only(['date', 'commission', 'status'])
                     ->toArray();
 
                 if (array_key_exists('products', $validated)) {
@@ -289,11 +288,18 @@ class OrderController extends Controller
                     $delivery = $deliveryFeeService->calculateByIds($order->store_id, $companyId);
                     $productsTotal = round((float) $prepared['lines']->sum('line_total'), 2);
                     $total = round($productsTotal + (float) $delivery['extra_delivery_fee'], 2);
+                    $totalWeight = round((float) $prepared['lines']->sum('line_weight_kg'), 3);
+                    $requiredLoad = round(
+                        $totalWeight * (1 + (SmartDispatchService::SAFETY_MARGIN_PERCENT / 100)),
+                        3,
+                    );
 
                     $orderData['delivery_distance_km'] = $delivery['delivery_distance_km'];
                     $orderData['extra_delivery_km'] = $delivery['extra_delivery_km'];
                     $orderData['extra_delivery_fee'] = $delivery['extra_delivery_fee'];
                     $orderData['total_price'] = $total;
+                    $orderData['total_weight_kg'] = $totalWeight;
+                    $orderData['required_load_kg'] = $requiredLoad;
                     $orderData['remaining_amount'] = max(
                         $total - (float) $order->paid_amount,
                         0,
@@ -304,6 +310,8 @@ class OrderController extends Controller
                         $sync[$line['product_detail_id']] = [
                             'price' => $line['price'],
                             'quantity' => $line['quantity'],
+                            'package_weight_kg' => $line['package_weight_kg'],
+                            'line_weight_kg' => $line['line_weight_kg'],
                             'discount' => $line['discount_amount'],
                         ];
                     }
@@ -451,16 +459,54 @@ class OrderController extends Controller
         ]);
     }
 
-    public function assignDriver(
+    public function driverRecommendations(
         Request $request,
         Order $order,
-        FirebaseNotificationService $fcmService,
-        AppNotificationService $notifications,
-        EstimatedDeliveryService $etaService,
+        SmartDispatchService $smartDispatch,
     ) {
         $company = $request->user()?->company;
 
-        if (!$company) {
+        if (! $company) {
+            return $this->notFound('Company account not found');
+        }
+
+        if (! $this->orderBelongsToCompany($order, $company->id)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your company',
+                'data' => null,
+            ], 403);
+        }
+
+        if (in_array($order->status, ['delivered', 'cancelled'], true)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Delivered or cancelled orders cannot be assigned to a driver',
+                'data' => null,
+            ], 422);
+        }
+
+        try {
+            return response()->json([
+                'status' => true,
+                'message' => 'Driver recommendations calculated successfully',
+                'data' => $smartDispatch->recommendations($order),
+            ]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to calculate driver recommendations', $e);
+        }
+    }
+
+    public function assignDriver(
+        Request $request,
+        Order $order,
+        DriverAssignmentService $assignmentService,
+    ) {
+        $company = $request->user()?->company;
+
+        if (! $company) {
             return $this->notFound('Company account not found');
         }
 
@@ -468,7 +514,7 @@ class OrderController extends Controller
             'driver_id' => ['required', 'integer', 'exists:drivers,id'],
         ]);
 
-        if (!$this->orderBelongsToCompany($order, $company->id)) {
+        if (! $this->orderBelongsToCompany($order, $company->id)) {
             return response()->json([
                 'status' => false,
                 'message' => 'This order does not belong to your company',
@@ -486,107 +532,95 @@ class OrderController extends Controller
 
         $driver = Driver::with(['user', 'car.company'])
             ->whereKey($validated['driver_id'])
-            ->whereHas('car', function ($query) use ($company) {
-                $query->where('company_id', $company->id);
-            })
+            ->whereHas('car', fn ($query) => $query->where('company_id', $company->id))
             ->first();
 
-        if (!$driver) {
+        if (! $driver) {
             return $this->notFound('Driver not found in your company');
         }
 
-        if ($driver->status !== 'available' && (int) $order->driver_id !== $driver->id) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'This driver is not available right now.',
+        try {
+            $result = $assignmentService->assign($order, $driver, 'manual');
+
+            return response()->json([
+                'status' => true,
+                'message' => ($result['driver_push_result']['success'] ?? false)
+                    ? 'Order assigned to driver successfully'
+                    : 'Order assigned, but driver push notification was not sent',
+                'data' => $result,
             ]);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to assign driver', $e);
+        }
+    }
+
+    public function assignRecommendedDriver(
+        Request $request,
+        Order $order,
+        SmartDispatchService $smartDispatch,
+        DriverAssignmentService $assignmentService,
+    ) {
+        $company = $request->user()?->company;
+
+        if (! $company) {
+            return $this->notFound('Company account not found');
         }
 
-        DB::transaction(function () use ($order, $driver) {
-            if ($order->driver_id && (int) $order->driver_id !== $driver->id) {
-                Driver::whereKey($order->driver_id)->update(['status' => 'available']);
+        $validated = $request->validate([
+            'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
+        ]);
+
+        if (! $this->orderBelongsToCompany($order, $company->id)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'This order does not belong to your company',
+                'data' => null,
+            ], 403);
+        }
+
+        if (in_array($order->status, ['delivered', 'cancelled'], true)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Delivered or cancelled orders cannot be assigned to a driver',
+                'data' => null,
+            ], 422);
+        }
+
+        try {
+            $dispatch = $smartDispatch->recommendations($order);
+            $recommendations = collect($dispatch['recommendations']);
+
+            if (! $dispatch['ready'] || $recommendations->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'driver_id' => $dispatch['message'],
+                ]);
             }
 
-            $order->update([
-                'driver_id' => $driver->id,
-                'status' => 'delivering',
+            $selected = isset($validated['driver_id'])
+                ? $recommendations->firstWhere('driver_id', (int) $validated['driver_id'])
+                : $recommendations->first();
+
+            if (! $selected) {
+                throw ValidationException::withMessages([
+                    'driver_id' => 'السائق المحدد غير موجود ضمن الاقتراحات المناسبة لهذا الطلب.',
+                ]);
+            }
+
+            $driver = Driver::query()->findOrFail((int) $selected['driver_id']);
+            $result = $assignmentService->assign($order, $driver, 'smart');
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Recommended driver assigned successfully',
+                'data' => $result,
             ]);
-
-            $driver->update(['status' => 'busy']);
-        });
-
-        $order = $etaService->updateOrderEta($order);
-        $order->load($this->relations);
-
-        $driverPushResult = [
-            'success' => false,
-            'message' => 'Driver does not have an FCM token.',
-        ];
-
-        $driverNotification = $notifications->create(
-            userId: $driver->user_id,
-            title: 'شحنة توصيل جديدة',
-            body: 'تم إسناد شحنة جديدة إليك، يرجى مراجعة التفاصيل داخل التطبيق',
-            type: 'driver_assigned_order',
-            orderId: $order->id,
-            data: [
-                'type' => 'driver_assigned_order',
-                'order_id' => (string) $order->id,
-                'driver_id' => (string) $driver->id,
-            ]
-        );
-
-        if ($driver->fcm_token) {
-            $driverPushResult = $fcmService->sendToToken(
-                token: $driver->fcm_token,
-                title: $driverNotification->title,
-                body: $driverNotification->body,
-                data: $driverNotification->data ?? [],
-            );
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return $this->serverError('Failed to assign recommended driver', $e);
         }
-
-        $storePushResult = [
-            'success' => false,
-            'message' => 'Store does not have a user account.',
-        ];
-
-        $storeNotification = null;
-
-        if ($order->store?->user_id) {
-            $storeNotification = $notifications->create(
-                userId: $order->store->user_id,
-                title: 'تم إسناد سائق للشحنة',
-                body: "تم إسناد السائق {$driver->user?->name} للشحنة، يمكنك متابعة التفاصيل داخل التطبيق",
-                type: 'driver_assigned_to_order',
-                orderId: $order->id,
-                data: [
-                    'type' => 'driver_assigned_to_order',
-                    'order_id' => (string) $order->id,
-                    'driver_id' => (string) $driver->id,
-                ]
-            );
-
-            $storePushResult = $fcmService->sendToUser(
-                userId: $order->store->user_id,
-                title: $storeNotification->title,
-                body: $storeNotification->body,
-                data: $storeNotification->data ?? [],
-                appType: 'store',
-            );
-        }
-
-        return response()->json([
-            'status' => true,
-            'message' => ($driverPushResult['success'] ?? false)
-                ? 'Order assigned to driver successfully'
-                : 'Order assigned, but driver push notification was not sent',
-            'data' => [
-                'order' => $order,
-                'driver_notification_id' => $driverNotification->id ?? null,
-                'driver_push_result' => $driverPushResult,
-                'store_notification_id' => $storeNotification?->id,
-                'store_push_result' => $storePushResult,
-            ],
-        ]);
     }
 
     public function estimateDelivery(Request $request, Order $order, EstimatedDeliveryService $etaService)
@@ -694,6 +728,14 @@ class OrderController extends Controller
                 ]);
             }
 
+            $packageWeight = (float) ($detail->package_weight_kg ?? 0);
+
+            if ($packageWeight <= 0) {
+                throw ValidationException::withMessages([
+                    'products' => "Package weight is missing for product detail #{$detail->id}.",
+                ]);
+            }
+
             $price = (float) $detail->price;
             $gross = round($price * $quantity, 2);
             $discountPercent = $detail->discountPercentageForQuantity($quantity);
@@ -704,6 +746,8 @@ class OrderController extends Controller
                 'company_id' => $detail->company_id,
                 'price' => $price,
                 'quantity' => $quantity,
+                'package_weight_kg' => round($packageWeight, 3),
+                'line_weight_kg' => round($packageWeight * $quantity, 3),
                 'discount_percent' => $discountPercent,
                 'discount_amount' => $discountAmount,
                 'line_total' => round($gross - $discountAmount, 2),
@@ -722,11 +766,18 @@ class OrderController extends Controller
         $delivery = $deliveryFeeService->calculateByIds($storeId, $companyId);
         $productsTotal = round((float) $lines->sum('line_total'), 2);
         $total = round($productsTotal + (float) $delivery['extra_delivery_fee'], 2);
+        $totalWeight = round((float) $lines->sum('line_weight_kg'), 3);
+        $requiredLoad = round(
+            $totalWeight * (1 + (SmartDispatchService::SAFETY_MARGIN_PERCENT / 100)),
+            3,
+        );
 
         $order = Order::create([
             'store_id' => $storeId,
             'driver_id' => null,
             'total_price' => $total,
+            'total_weight_kg' => $totalWeight,
+            'required_load_kg' => $requiredLoad,
             'date' => now()->toDateString(),
             'commission' => 0,
             'status' => 'pending',
@@ -743,6 +794,8 @@ class OrderController extends Controller
             $attach[$line['product_detail_id']] = [
                 'price' => $line['price'],
                 'quantity' => $line['quantity'],
+                'package_weight_kg' => $line['package_weight_kg'],
+                'line_weight_kg' => $line['line_weight_kg'],
                 'discount' => $line['discount_amount'],
             ];
         }

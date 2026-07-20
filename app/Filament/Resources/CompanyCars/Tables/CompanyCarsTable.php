@@ -27,6 +27,12 @@ class CompanyCarsTable
                     ->label('رقم اللوحة')
                     ->searchable()
                     ->sortable(),
+
+                TextColumn::make('max_load_kg')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' كغ')
+                    ->label('الحمولة القصوى')
+                    ->sortable(),
                 TextColumn::make('driver.user.name')
                     ->label('اسم السائق')
                     ->searchable()

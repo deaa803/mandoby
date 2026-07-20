@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Orders\RelationManagers;
 
+use App\Services\SmartDispatchService;
 use Filament\Actions\AttachAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DetachAction;
@@ -39,6 +40,20 @@ class ProductDetailsRelationManager extends RelationManager
                     ->required()
                     ->label('الكمية'),
 
+                TextInput::make('package_weight_kg')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->suffix('كغ')
+                    ->label('وزن الطرد'),
+
+                TextInput::make('line_weight_kg')
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->suffix('كغ')
+                    ->label('وزن السطر'),
+
                 TextInput::make('discount')
                     ->numeric()
                     ->minValue(0)
@@ -68,6 +83,16 @@ class ProductDetailsRelationManager extends RelationManager
                 TextColumn::make('quantity')
                     ->numeric()
                     ->label('الكمية'),
+
+                TextColumn::make('package_weight_kg')
+                    ->numeric(decimalPlaces: 3)
+                    ->suffix(' كغ')
+                    ->label('وزن الطرد'),
+
+                TextColumn::make('line_weight_kg')
+                    ->numeric(decimalPlaces: 3)
+                    ->suffix(' كغ')
+                    ->label('الوزن الإجمالي'),
 
                 TextColumn::make('discount')
                     ->numeric(decimalPlaces: 2)
@@ -140,5 +165,7 @@ class ProductDetailsRelationManager extends RelationManager
             'paid_amount' => $paidAmount,
             'remaining_amount' => max(0, $totalPrice - $paidAmount),
         ]);
+
+        app(SmartDispatchService::class)->calculateOrderWeight($order->fresh());
     }
 }

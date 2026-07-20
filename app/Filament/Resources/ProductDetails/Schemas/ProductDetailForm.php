@@ -51,6 +51,15 @@ class ProductDetailForm
                     ->required()
                     ->label('الحد الأدنى للطلب'),
 
+                TextInput::make('package_weight_kg')
+                    ->numeric()
+                    ->minValue(0.001)
+                    ->step(0.001)
+                    ->suffix('كغ')
+                    ->required()
+                    ->helperText('وزن الطرد الواحد. كمية الطلب تمثل عدد الطرود.')
+                    ->label('وزن الطرد'),
+
                 Toggle::make('has_discount')
                     ->dehydrated(false)
                     ->live()

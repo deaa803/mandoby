@@ -296,6 +296,10 @@ class ShopifyCompanyProductsSeeder extends Seeder
                             $categoryName
                         ),
                         'min_order_quantity' => (($rowNumber - 1) % 5) + 1,
+                        'package_weight_kg' => $this->packageWeightFor(
+                            $rowNumber,
+                            $categoryName
+                        ),
                     ]
                 );
 
@@ -335,6 +339,26 @@ class ShopifyCompanyProductsSeeder extends Seeder
         } finally {
             fclose($handle);
         }
+    }
+
+    private function packageWeightFor(int $rowNumber, string $categoryName): float
+    {
+        $baseWeights = [
+            'منزل وحديقة' => 8.0,
+            'ألبسة وإكسسوارات' => 1.5,
+            'إلكترونيات' => 4.0,
+            'أطفال' => 3.0,
+            'أثاث' => 25.0,
+            'ألعاب' => 2.5,
+            'قرطاسية' => 5.0,
+            'كاميرات وبصريات' => 3.5,
+            'مستلزمات الحيوانات' => 7.0,
+        ];
+
+        $base = $baseWeights[$categoryName] ?? 5.0;
+        $variation = (($rowNumber - 1) % 5) * 0.5;
+
+        return round($base + $variation, 3);
     }
 
     private function normalizeCategory(

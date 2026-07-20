@@ -168,9 +168,19 @@ Route::middleware([
     Route::get('/company/platform-payments', [PlatformCommissionController::class, 'index']);
     Route::post('/company/platform-payments', [PlatformCommissionController::class, 'store']);
 
+    Route::get(
+        '/company/orders/{order}/driver-recommendations',
+        [OrderController::class, 'driverRecommendations'],
+    );
+
     Route::post(
         '/company/orders/{order}/assign-driver',
         [OrderController::class, 'assignDriver'],
+    );
+
+    Route::post(
+        '/company/orders/{order}/assign-recommended-driver',
+        [OrderController::class, 'assignRecommendedDriver'],
     );
 
     Route::post(

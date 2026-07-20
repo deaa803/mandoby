@@ -51,6 +51,7 @@ class CompanyCarController extends Controller
 
         $validated = $request->validate([
             'vehicle_type' => ['required', 'string', 'max:255'],
+            'max_load_kg' => ['required', 'numeric', 'gt:0', 'max:100000'],
             'plate_number' => [
                 'required',
                 'string',
@@ -75,6 +76,7 @@ class CompanyCarController extends Controller
                     'company_id' => $company->id,
                     'vehicle_type' => $validated['vehicle_type'],
                     'plate_number' => $validated['plate_number'],
+                    'max_load_kg' => $validated['max_load_kg'],
                 ]);
 
                 $user = User::create([
@@ -150,13 +152,14 @@ class CompanyCarController extends Controller
                 'max:255',
                 Rule::unique('company_cars', 'plate_number')->ignore($companyCar->id),
             ],
+            'max_load_kg' => ['sometimes', 'required', 'numeric', 'gt:0', 'max:100000'],
             'driver_name' => ['sometimes', 'required', 'string', 'max:255'],
             'driver_phone' => ['sometimes', 'nullable', 'string', 'max:30'],
         ]);
 
         DB::transaction(function () use ($validated, $companyCar) {
             $carData = collect($validated)
-                ->only(['vehicle_type', 'plate_number'])
+                ->only(['vehicle_type', 'plate_number', 'max_load_kg'])
                 ->toArray();
 
             if ($carData !== []) {

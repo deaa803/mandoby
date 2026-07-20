@@ -13,6 +13,11 @@ class CompanyCar extends Model
         'company_id',
         'vehicle_type',
         'plate_number',
+        'max_load_kg',
+    ];
+
+    protected $casts = [
+        'max_load_kg' => 'decimal:2',
     ];
 
     protected static function booted(): void

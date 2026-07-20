@@ -49,6 +49,12 @@ class ProductDetailsTable
                     ->label('الحد الأدنى')
                     ->sortable(),
 
+                TextColumn::make('package_weight_kg')
+                    ->numeric(decimalPlaces: 3)
+                    ->suffix(' كغ')
+                    ->label('وزن الطرد')
+                    ->sortable(),
+
                 TextColumn::make('discount.discount_percentage')
                     ->suffix('%')
                     ->placeholder('-')

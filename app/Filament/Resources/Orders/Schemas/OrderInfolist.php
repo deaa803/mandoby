@@ -16,6 +16,17 @@ class OrderInfolist
                 TextEntry::make('date')->date()->label('تاريخ الطلب'),
                 TextEntry::make('status')->badge()->label('الحالة'),
                 TextEntry::make('driver.user.name')->label('السائق')->placeholder('-'),
+                TextEntry::make('driver.car.vehicle_type')->label('السيارة المرتبطة')->placeholder('-'),
+                TextEntry::make('total_weight_kg')->numeric(decimalPlaces: 3)->suffix(' كغ')->label('وزن الطلب'),
+                TextEntry::make('required_load_kg')->numeric(decimalPlaces: 3)->suffix(' كغ')->label('الحمولة المطلوبة مع الأمان'),
+                TextEntry::make('driver_assignment_method')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'smart' => 'اقتراح ذكي',
+                        'manual' => 'اختيار يدوي',
+                        default => '-',
+                    })
+                    ->badge()
+                    ->label('طريقة التعيين'),
                 TextEntry::make('total_price')->numeric(decimalPlaces: 2)->label('الإجمالي'),
                 TextEntry::make('paid_amount')->numeric(decimalPlaces: 2)->label('المدفوع'),
                 TextEntry::make('remaining_amount')->numeric(decimalPlaces: 2)->label('المتبقي'),

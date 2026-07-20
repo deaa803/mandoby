@@ -18,7 +18,10 @@ class ProductDetailFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'price' => fake()->randomFloat(2, 1000, 500000),
+            'min_order_quantity' => fake()->numberBetween(1, 10),
+            'package_weight_kg' => fake()->randomFloat(3, 0.25, 50),
+            'status' => 'available',
         ];
     }
 }

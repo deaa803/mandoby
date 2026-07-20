@@ -30,6 +30,15 @@ class CompanyCarForm
                     ->maxLength(255)
                     ->label('رقم اللوحة'),
 
+                TextInput::make('max_load_kg')
+                    ->numeric()
+                    ->minValue(1)
+                    ->step(0.01)
+                    ->suffix('كغ')
+                    ->required()
+                    ->helperText('الحمولة القصوى الآمنة للسيارة بالكيلوغرام.')
+                    ->label('حمولة السيارة'),
+
                 // هذا حقل واجهة فقط، واسم السائق يُحفظ داخل users.name.
                 TextInput::make('driver_name')
                     ->required()

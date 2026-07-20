@@ -65,6 +65,7 @@ class ProductDetailController extends Controller
             'category_id' => ['required', 'exists:categories,id'],
             'price' => ['required', 'numeric', 'gt:0'],
             'min_order_quantity' => ['required', 'integer', 'min:1'],
+            'package_weight_kg' => ['required', 'numeric', 'gt:0', 'max:50000'],
 
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'images' => ['nullable', 'array'],
@@ -93,6 +94,7 @@ class ProductDetailController extends Controller
                     'status' => 'available',
                     'price' => $validated['price'],
                     'min_order_quantity' => $validated['min_order_quantity'],
+                    'package_weight_kg' => $validated['package_weight_kg'],
                 ]);
 
                 $featuresData = [];
@@ -174,6 +176,7 @@ class ProductDetailController extends Controller
             'status' => ['sometimes', 'required', 'in:available,unavailable'],
             'price' => ['sometimes', 'required', 'numeric', 'gt:0'],
             'min_order_quantity' => ['sometimes', 'required', 'integer', 'min:1'],
+            'package_weight_kg' => ['sometimes', 'required', 'numeric', 'gt:0', 'max:50000'],
 
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'images' => ['nullable', 'array'],
@@ -196,6 +199,7 @@ class ProductDetailController extends Controller
                         'status',
                         'price',
                         'min_order_quantity',
+                        'package_weight_kg',
                     ])
                     ->toArray();
 

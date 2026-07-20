@@ -14,6 +14,7 @@ class CompanyCarInfolist
                 TextEntry::make('company.name_company')->label('الشركة'),
                 TextEntry::make('vehicle_type')->label('نوع السيارة'),
                 TextEntry::make('plate_number')->label('رقم اللوحة'),
+                TextEntry::make('max_load_kg')->numeric(decimalPlaces: 2)->suffix(' كغ')->label('الحمولة القصوى'),
                 TextEntry::make('driver.user.name')->label('اسم السائق')->placeholder('-'),
                 TextEntry::make('driver.user.email')->label('بريد السائق')->placeholder('-'),
                 TextEntry::make('driver.user.phone')->label('هاتف السائق')->placeholder('-'),

@@ -17,6 +17,7 @@ class ProductDetailInfolist
                 TextEntry::make('category.name')->label('التصنيف'),
                 TextEntry::make('price')->numeric(decimalPlaces: 2)->label('السعر'),
                 TextEntry::make('min_order_quantity')->numeric()->label('الحد الأدنى للطلب'),
+                TextEntry::make('package_weight_kg')->numeric(decimalPlaces: 3)->suffix(' كغ')->label('وزن الطرد'),
                 TextEntry::make('discount.quantity')->numeric()->placeholder('-')->label('كمية الخصم'),
                 TextEntry::make('discount.discount_percentage')->suffix('%')->placeholder('-')->label('نسبة الخصم'),
                 TextEntry::make('status')
